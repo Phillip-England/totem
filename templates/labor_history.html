@@ -17,48 +17,129 @@
     <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
     <hr>
 
+    <!-- Quick Ranges ... -->
     <form action="/admin/locations/{{ .Location.ID }}/labor/history" method="GET" class="filter-form">
         <label>Start Date: <input type="date" name="start" value="{{ .StartDate }}"></label>
         <label>End Date: <input type="date" name="end" value="{{ .EndDate }}"></label>
         <input type="submit" value="Filter History">
         <a href="/admin/locations/{{ .Location.ID }}/labor/history">Clear Filter</a>
+        <br><br>
+        <strong>Quick Ranges: </strong>
+        <a href="?start={{ .Ranges.MonthStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Current Month</a>
+        <a href="?start={{ .Ranges.NinetyStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Last 90 Days</a>
+        <a href="?start={{ .Ranges.YTDStart }}&end={{ .Ranges.Today }}">Year to Date</a>
     </form>
+
+    <div style="background: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; margin-bottom: 30px;">
+        <h3>Performance Range Summary</h3>
+        <div style="display: flex; gap: 40px; flex-wrap: wrap;">
+            <div>
+                <strong>Total Business Days:</strong><br>
+                <span style="font-size: 1.2em;">{{ .Summary.BusinessDays }}</span>
+            </div>
+            <div>
+                <strong>Total Sales:</strong><br>
+                <span style="font-size: 1.2em;">${{ printf "%.2f" .Summary.Sales }}</span>
+            </div>
+            <div>
+                <strong>Total Labor Hours:</strong><br>
+                <span style="font-size: 1.2em;">{{ printf "%.2f" .Summary.Hours }}</span>
+            </div>
+            <div>
+                <strong>Total OT Hours:</strong><br>
+                <span style="font-size: 1.2em;">{{ printf "%.2f" .Summary.OTHours }}</span>
+            </div>
+            <div>
+                <strong>Total Wages:</strong><br>
+                <span style="font-size: 1.2em;">${{ printf "%.2f" .Summary.Wages }}</span>
+            </div>
+            <div>
+                <strong>Range Productivity:</strong><br>
+                <span style="font-size: 1.2em;">${{ printf "%.2f" .Summary.Productivity }} / hr</span>
+            </div>
+            <div>
+                <strong>Range Labor %:</strong><br>
+                <span style="font-size: 1.2em;">{{ printf "%.2f" .Summary.LaborPercent }}%</span>
+            </div>
+        </div>
+    </div>
 
     <table>
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Day</th>
-                <th>Regular Hours</th>
-                <th>Overtime Hours</th>
+                <th>Total Sales</th>
                 <th>Total Hours</th>
+                <th>OT Hours</th>
+                <th>Total Wages</th>
+                <th>Productivity</th>
+                <th>Labor %</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {{ range .Records }}
-            <tr {{ if eq .TotalHours 0.0 }}style="background-color: #fff3f3;"{{ end }}>
+            <tr {{ if or (not .HasSales) (not .HasLabor) }}style="background-color: #fff3f3;"{{ end }}>
                 <td>{{ .Date }}</td>
                 <td>{{ .DayOfWeek }}</td>
                 <td>
-                    {{ if eq .TotalHours 0.0 }}<span style="color: #999;">-</span>{{ else }}{{ printf "%.2f" .RegularHours }}{{ end }}
-                </td>
-                <td>
-                    {{ if eq .TotalHours 0.0 }}<span style="color: #999;">-</span>{{ else }}{{ printf "%.2f" .OvertimeHours }}{{ end }}
-                </td>
-                <td>
-                    {{ if eq .TotalHours 0.0 }}
-                        <span style="color: #999;">No Data</span>
+                    {{ if .HasSales }}
+                        ${{ printf "%.2f" .TotalSales }}
                     {{ else }}
-                        <strong>{{ printf "%.2f" .TotalHours }}</strong>
+                        <span style="color: #999;">Missing</span>
                     {{ end }}
                 </td>
                 <td>
-                    <a href="/admin/locations/{{ $.Location.ID }}/labor/new?date={{ .Date }}">{{ if eq .TotalHours 0.0 }}Enter{{ else }}Edit{{ end }}</a>
+                    {{ if .HasLabor }}
+                        {{ printf "%.2f" .TotalHours }}
+                    {{ else }}
+                        <span style="color: #999;">Missing</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .HasLabor }}
+                        {{ printf "%.2f" .OvertimeHours }}
+                    {{ else }}
+                        <span style="color: #999;">-</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .HasLabor }}
+                        ${{ printf "%.2f" .TotalWages }}
+                    {{ else }}
+                        <span style="color: #999;">-</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if and .HasSales .HasLabor }}
+                        <strong>${{ printf "%.2f" .Productivity }}</strong>
+                    {{ else }}
+                        <span style="color: #999;">-</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if and .HasSales .HasLabor }}
+                        {{ printf "%.2f" .LaborPercent }}%
+                    {{ else }}
+                        <span style="color: #999;">-</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if not .HasSales }}
+                        <a href="/admin/locations/{{ $.Location.ID }}/sales/new?date={{ .Date }}" style="margin-right:5px;">Enter Sales</a>
+                    {{ end }}
+                    {{ if not .HasLabor }}
+                        <a href="/admin/locations/{{ $.Location.ID }}/labor/new?date={{ .Date }}">Enter Labor</a>
+                    {{ end }}
+                    {{ if and .HasSales .HasLabor }}
+                        <a href="/admin/locations/{{ $.Location.ID }}/sales/new?date={{ .Date }}">Edit Sales</a> | 
+                        <a href="/admin/locations/{{ $.Location.ID }}/labor/new?date={{ .Date }}">Edit Labor</a>
+                    {{ end }}
                 </td>
             </tr>
             {{ else }}
-            <tr><td colspan="6">No labor records found.</td></tr>
+            <tr><td colspan="8">No records found.</td></tr>
             {{ end }}
         </tbody>
     </table>

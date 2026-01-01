@@ -26,6 +26,11 @@
         <label>End Date: <input type="date" name="end" value="{{ .EndDate }}"></label>
         <input type="submit" value="Filter History">
         <a href="/admin/locations/{{ .Location.ID }}/sales/history">Clear Filter</a>
+        <br><br>
+        <strong>Quick Ranges: </strong>
+        <a href="?start={{ .Ranges.MonthStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Current Month</a>
+        <a href="?start={{ .Ranges.NinetyStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Last 90 Days</a>
+        <a href="?start={{ .Ranges.YTDStart }}&end={{ .Ranges.Today }}">Year to Date</a>
     </form>
 
     <!-- Range Summary (Only if filtered) -->

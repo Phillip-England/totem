@@ -24,18 +24,20 @@
             <h3>Day Part Sales</h3>
             <table>
                 <thead>
-                    <tr><th>Item</th><th>Amount</th></tr>
+                    <tr><th>Item</th><th>Amount</th><th>%</th></tr>
                 </thead>
                 <tbody>
                     {{ range .DayParts }}
                     <tr>
                         <td>{{ .Item }}</td>
                         <td>${{ printf "%.2f" .Amount }}</td>
+                        <td>{{ printf "%.1f" .Percent }}%</td>
                     </tr>
                     {{ end }}
                     <tr style="font-weight:bold;">
                         <td>Total</td>
                         <td>${{ printf "%.2f" .DayPartTotal }}</td>
+                        <td>100.0%</td>
                     </tr>
                 </tbody>
             </table>
@@ -46,18 +48,20 @@
             <h3>Destination Sales</h3>
             <table>
                 <thead>
-                    <tr><th>Item</th><th>Amount</th></tr>
+                    <tr><th>Item</th><th>Amount</th><th>%</th></tr>
                 </thead>
                 <tbody>
                     {{ range .Destinations }}
                     <tr>
                         <td>{{ .Item }}</td>
                         <td>${{ printf "%.2f" .Amount }}</td>
+                        <td>{{ printf "%.1f" .Percent }}%</td>
                     </tr>
                     {{ end }}
                     <tr style="font-weight:bold;">
                         <td>Total</td>
                         <td>${{ printf "%.2f" .DestinationTotal }}</td>
+                        <td>100.0%</td>
                     </tr>
                 </tbody>
             </table>

@@ -23,6 +23,12 @@
             <input type="date" id="date" name="date" required value="{{ .Today }}">
         </div>
 
+        <div style="margin-bottom: 20px; background: #f9f9f9; padding: 15px; border: 1px dashed #ccc;">
+            <label><strong>Paste Sales Report Text:</strong></label><br>
+            <small>Paste the full text from the Daypart Activity Report. This will override manual inputs below.</small><br>
+            <textarea name="raw_text" rows="8" style="width: 100%; margin-top: 5px;"></textarea>
+        </div>
+
         <div class="container">
             <!-- Day Parts -->
             <div class="section">
