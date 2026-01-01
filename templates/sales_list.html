@@ -32,24 +32,51 @@
     {{ if or .StartDate .EndDate }}
     <div class="summary-box">
         <h3>Range Summary ({{ .StartDate }} to {{ .EndDate }})</h3>
+        <p><strong>Days with Data:</strong> {{ .RangeSummary.DayCount }}</p>
         <p><strong>Total Sales:</strong> ${{ printf "%.2f" .RangeSummary.TotalAmount }}</p>
         
         <div class="flex">
             <div>
-                <h4>Day Part Totals</h4>
-                <ul>
-                    {{ range $k, $v := .RangeSummary.DayPartTotals }}
-                    <li>{{ $k }}: ${{ printf "%.2f" $v }}</li>
-                    {{ end }}
-                </ul>
+                <h4>Day Part Stats</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Total</th>
+                            <th>Average</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range $k, $v := .RangeSummary.DayPartTotals }}
+                        <tr>
+                            <td>{{ $k }}</td>
+                            <td>${{ printf "%.2f" $v }}</td>
+                            <td>${{ printf "%.2f" (index $.RangeSummary.DayPartAverages $k) }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
             </div>
             <div>
-                <h4>Destination Totals</h4>
-                <ul>
-                    {{ range $k, $v := .RangeSummary.DestinationTotals }}
-                    <li>{{ $k }}: ${{ printf "%.2f" $v }}</li>
-                    {{ end }}
-                </ul>
+                <h4>Destination Stats</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Total</th>
+                            <th>Average</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range $k, $v := .RangeSummary.DestinationTotals }}
+                        <tr>
+                            <td>{{ $k }}</td>
+                            <td>${{ printf "%.2f" $v }}</td>
+                            <td>${{ printf "%.2f" (index $.RangeSummary.DestinationAverages $k) }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

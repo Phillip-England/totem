@@ -317,10 +317,16 @@ func RegisterRoutes(app *vii.App) {
 			if _, exists := rangeSummary.DayPartTotals[item]; !exists {
 				rangeSummary.DayPartTotals[item] = 0
 			}
+			if _, exists := rangeSummary.DayPartAverages[item]; !exists {
+				rangeSummary.DayPartAverages[item] = 0
+			}
 		}
 		for _, item := range data.Destinations {
 			if _, exists := rangeSummary.DestinationTotals[item]; !exists {
 				rangeSummary.DestinationTotals[item] = 0
+			}
+			if _, exists := rangeSummary.DestinationAverages[item]; !exists {
+				rangeSummary.DestinationAverages[item] = 0
 			}
 		}
 
