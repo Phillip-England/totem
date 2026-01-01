@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Location</title>
+</head>
+<body>
+    <h1>Edit Location</h1>
+    <a href="/admin">Back to Dashboard</a>
+
+    <form action="/admin/locations/{{ .Location.ID }}/update" method="POST">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="{{ .Location.Name }}" required><br><br>
+        
+        <label for="number">Number:</label>
+        <input type="text" id="number" name="number" value="{{ .Location.Number }}" required><br><br>
+        
+        <input type="submit" value="Update Location">
+    </form>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .form-container { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>Admin Dashboard</h1>
+    <p>Welcome, Admin!</p>
+    <a href="/">Go Back Home</a>
+
+    <div class="form-container">
+        <h2>Add New Location</h2>
+        <form action="/admin/locations" method="POST">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required>
+            <label for="number">Number:</label>
+            <input type="text" id="number" name="number" required>
+            <input type="submit" value="Add Location">
+        </form>
+    </div>
+
+    <h2>Existing Locations</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Number</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Locations }}
+            <tr>
+                <td>{{ .ID }}</td>
+                <td>{{ .Name }}</td>
+                <td>{{ .Number }}</td>
+                <td>
+                    <a href="/admin/locations/{{ .ID }}/edit">Edit</a>
+                    <form action="/admin/locations/{{ .ID }}/delete" method="POST" style="display:inline;">
+                        <input type="submit" value="Delete" onclick="return confirm('Are you sure?');">
+                    </form>
+                </td>
+            </tr>
+            {{ else }}
+            <tr>
+                <td colspan="4">No locations found.</td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</body>
+</html>
