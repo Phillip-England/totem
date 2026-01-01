@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Location.Name }} - Details</title>
+</head>
+<body>
+    <h1>Location Details</h1>
+    <a href="/admin">Back to Dashboard</a>
+    <hr>
+    
+    <p><strong>ID:</strong> {{ .Location.ID }}</p>
+    <p><strong>Name:</strong> {{ .Location.Name }}</p>
+    <p><strong>Number:</strong> {{ .Location.Number }}</p>
+
+    <br>
+    <a href="/admin/locations/{{ .Location.ID }}/edit">Edit this Location</a>
+</body>
+</html>

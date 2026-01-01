@@ -41,7 +41,7 @@
             {{ range .Locations }}
             <tr>
                 <td>{{ .ID }}</td>
-                <td>{{ .Name }}</td>
+                <td><a href="/admin/locations/{{ .ID }}">{{ .Name }}</a></td>
                 <td>{{ .Number }}</td>
                 <td>
                     <a href="/admin/locations/{{ .ID }}/edit">Edit</a>
