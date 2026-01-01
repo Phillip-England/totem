@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Labor - {{ .Location.Name }}</title>
+</head>
+<body>
+    <h1>Enter Daily Labor Hours</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <form action="/admin/locations/{{ .Location.ID }}/labor" method="POST">
+        <div style="margin-bottom: 20px;">
+            <label for="date"><strong>Date:</strong></label>
+            <input type="date" id="date" name="date" required value="{{ .Today }}">
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <label>Regular Hours:</label>
+            <input type="number" step="0.01" min="0" name="regular" placeholder="0.00" required>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label>Overtime Hours:</label>
+            <input type="number" step="0.01" min="0" name="overtime" placeholder="0.00" required>
+        </div>
+
+        <input type="submit" value="Save Labor Data">
+    </form>
+</body>
+</html>

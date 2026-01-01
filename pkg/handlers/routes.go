@@ -187,6 +187,11 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 
+		today := r.URL.Query().Get("date")
+		if today == "" {
+			today = time.Now().Format("2006-01-02")
+		}
+
 		templateData := struct {
 			Location     data.CfaLocation
 			DayParts     []string
@@ -196,7 +201,7 @@ func RegisterRoutes(app *vii.App) {
 			Location:     loc,
 			DayParts:     data.DayParts,
 			Destinations: data.Destinations,
-			Today:        time.Now().Format("2006-01-02"),
+			Today:        today,
 		}
 		err = vii.ExecuteTemplate(w, r, "sales_form.html", templateData)
 		if err != nil {
@@ -305,6 +310,13 @@ func RegisterRoutes(app *vii.App) {
 
 		startDate := r.URL.Query().Get("start")
 		endDate := r.URL.Query().Get("end")
+
+		// Default to last 90 days if no filter provided
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
 
 		dailySummaries, rangeSummary, err := data.GetSalesSummaries(id, startDate, endDate)
 		if err != nil {
@@ -423,6 +435,166 @@ func RegisterRoutes(app *vii.App) {
 		}
 
 		err = vii.ExecuteTemplate(w, r, "sales_day_detail.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Labor Form
+	app.At("GET /admin/locations/{id}/labor/new", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+
+		today := r.URL.Query().Get("date")
+		if today == "" {
+			today = time.Now().Format("2006-01-02")
+		}
+
+		templateData := struct {
+			Location data.CfaLocation
+			Today    string
+		}{
+			Location: loc,
+			Today:    today,
+		}
+		err = vii.ExecuteTemplate(w, r, "labor_form.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Save Labor
+	app.At("POST /admin/locations/{id}/labor", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		date := r.FormValue("date")
+		regStr := r.FormValue("regular")
+		otStr := r.FormValue("overtime")
+
+		regular, _ := strconv.ParseFloat(regStr, 64)
+		overtime, _ := strconv.ParseFloat(otStr, 64)
+
+		if date != "" {
+			err := data.SaveLabor(id, date, regular, overtime)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
+	})
+
+	// Labor History
+	app.At("GET /admin/locations/{id}/labor/history", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+
+		startDate := r.URL.Query().Get("start")
+		endDate := r.URL.Query().Get("end")
+
+		// Default to last 90 days if no filter provided
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
+
+		records, err := data.GetLaborSummaries(id, startDate, endDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		templateData := struct {
+			Location  data.CfaLocation
+			Records   []data.LaborRecord
+			StartDate string
+			EndDate   string
+		}{
+			Location:  loc,
+			Records:   records,
+			StartDate: startDate,
+			EndDate:   endDate,
+		}
+
+		err = vii.ExecuteTemplate(w, r, "labor_history.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Productivity Report
+	app.At("GET /admin/locations/{id}/productivity", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+
+		startDate := r.URL.Query().Get("start")
+		endDate := r.URL.Query().Get("end")
+
+		// Default to last 90 days if no filter provided
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
+
+		report, err := data.GetProductivityReport(id, startDate, endDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Sort by Date DESC
+		sort.Slice(report, func(i, j int) bool {
+			return report[i].Date > report[j].Date
+		})
+
+		templateData := struct {
+			Location  data.CfaLocation
+			Report    []data.ProductivityRecord
+			StartDate string
+			EndDate   string
+		}{
+			Location:  loc,
+			Report:    report,
+			StartDate: startDate,
+			EndDate:   endDate,
+		}
+
+		err = vii.ExecuteTemplate(w, r, "productivity_history.html", templateData)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

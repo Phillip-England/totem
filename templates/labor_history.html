@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labor History - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .filter-form { background: #eee; padding: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Labor History</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <form action="/admin/locations/{{ .Location.ID }}/labor/history" method="GET" class="filter-form">
+        <label>Start Date: <input type="date" name="start" value="{{ .StartDate }}"></label>
+        <label>End Date: <input type="date" name="end" value="{{ .EndDate }}"></label>
+        <input type="submit" value="Filter History">
+        <a href="/admin/locations/{{ .Location.ID }}/labor/history">Clear Filter</a>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Regular Hours</th>
+                <th>Overtime Hours</th>
+                <th>Total Hours</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Records }}
+            <tr {{ if eq .TotalHours 0.0 }}style="background-color: #fff3f3;"{{ end }}>
+                <td>{{ .Date }}</td>
+                <td>{{ .DayOfWeek }}</td>
+                <td>
+                    {{ if eq .TotalHours 0.0 }}<span style="color: #999;">-</span>{{ else }}{{ printf "%.2f" .RegularHours }}{{ end }}
+                </td>
+                <td>
+                    {{ if eq .TotalHours 0.0 }}<span style="color: #999;">-</span>{{ else }}{{ printf "%.2f" .OvertimeHours }}{{ end }}
+                </td>
+                <td>
+                    {{ if eq .TotalHours 0.0 }}
+                        <span style="color: #999;">No Data</span>
+                    {{ else }}
+                        <strong>{{ printf "%.2f" .TotalHours }}</strong>
+                    {{ end }}
+                </td>
+                <td>
+                    <a href="/admin/locations/{{ $.Location.ID }}/labor/new?date={{ .Date }}">{{ if eq .TotalHours 0.0 }}Enter{{ else }}Edit{{ end }}</a>
+                </td>
+            </tr>
+            {{ else }}
+            <tr><td colspan="6">No labor records found.</td></tr>
+            {{ end }}
+        </tbody>
+    </table>
+</body>
+</html>

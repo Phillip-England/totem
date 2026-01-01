@@ -83,26 +83,36 @@
     {{ end }}
 
     <!-- Daily List -->
-    <h3>Daily Records</h3>
     <table>
         <thead>
             <tr>
                 <th>Date</th>
+                <th>Day</th>
                 <th>Total Sales</th>
-                <th>Action</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {{ range .DailySummaries }}
-            <tr>
+            <tr {{ if eq .TotalAmount 0.0 }}style="background-color: #fff3f3;"{{ end }}>
                 <td>{{ .Date }}</td>
-                <td>${{ printf "%.2f" .TotalAmount }}</td>
+                <td>{{ .DayOfWeek }}</td>
                 <td>
-                    <a href="/admin/locations/{{ $.Location.ID }}/sales/date/{{ .Date }}">View Breakdown</a>
+                    {{ if eq .TotalAmount 0.0 }}
+                        <span style="color: #999;">No Data</span>
+                    {{ else }}
+                        ${{ printf "%.2f" .TotalAmount }}
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if gt .TotalAmount 0.0 }}
+                        <a href="/admin/locations/{{ $.Location.ID }}/sales/date/{{ .Date }}">View</a>
+                    {{ end }}
+                    <a href="/admin/locations/{{ $.Location.ID }}/sales/new?date={{ .Date }}" style="margin-left: 10px;">{{ if eq .TotalAmount 0.0 }}Enter{{ else }}Edit{{ end }}</a>
                 </td>
             </tr>
             {{ else }}
-            <tr><td colspan="3">No records found.</td></tr>
+            <tr><td colspan="4">No records found.</td></tr>
             {{ end }}
         </tbody>
     </table>

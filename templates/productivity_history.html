@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Productivity History - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .filter-form { background: #eee; padding: 10px; margin-bottom: 20px; }
+        .alert { color: red; font-weight: bold; }
+        .ok { color: green; }
+        .action-link { 
+            display: inline-block; 
+            padding: 2px 5px; 
+            background: #007bff; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 3px; 
+            font-size: 0.8em; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Productivity History</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <form action="/admin/locations/{{ .Location.ID }}/productivity" method="GET" class="filter-form">
+        <label>Start Date: <input type="date" name="start" value="{{ .StartDate }}"></label>
+        <label>End Date: <input type="date" name="end" value="{{ .EndDate }}"></label>
+        <input type="submit" value="Filter Report">
+        <a href="/admin/locations/{{ .Location.ID }}/productivity">Clear Filter</a>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Total Sales</th>
+                <th>Total Labor Hours</th>
+                <th>Productivity ($/hr)</th>
+                <th>Status / Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Report }}
+            <tr {{ if or (not .HasSales) (not .HasLabor) }}style="background-color: #fff3f3;"{{ end }}>
+                <td>{{ .Date }}</td>
+                <td>{{ .DayOfWeek }}</td>
+                <td>
+                    {{ if .HasSales }}
+                        ${{ printf "%.2f" .TotalSales }}
+                    {{ else }}
+                        <span style="color: #999;">Missing</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if .HasLabor }}
+                        {{ printf "%.2f" .TotalLabor }}
+                    {{ else }}
+                        <span style="color: #999;">Missing</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if and .HasSales .HasLabor }}
+                        <strong>${{ printf "%.2f" .Productivity }}</strong>
+                    {{ else }}
+                        <span style="color: #999;">-</span>
+                    {{ end }}
+                </td>
+                <td>
+                    {{ if and .HasSales .HasLabor }}
+                        <span class="ok">Complete</span>
+                    {{ else }}
+                        {{ if not .HasSales }}
+                            <a href="/admin/locations/{{ $.Location.ID }}/sales/new?date={{ .Date }}" class="action-link">Enter Sales</a>
+                        {{ end }}
+                        {{ if not .HasLabor }}
+                            <a href="/admin/locations/{{ $.Location.ID }}/labor/new?date={{ .Date }}" class="action-link">Enter Labor</a>
+                        {{ end }}
+                    {{ end }}
+                </td>
+            </tr>
+            {{ else }}
+            <tr><td colspan="6">No data found for this period.</td></tr>
+            {{ end }}
+        </tbody>
+    </table>
+</body>
+</html>
