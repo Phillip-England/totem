@@ -80,6 +80,79 @@ func parseBioEmployeesFromXLSX(reader io.Reader) ([]bioEmployeeRow, error) {
 	return employees, nil
 }
 
+type birthdateRow struct {
+	TimePunchName string
+	Birthday      string
+}
+
+func parseBirthdatesFromXLSX(reader io.Reader) ([]birthdateRow, error) {
+	file, err := excelize.OpenReader(reader)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+
+	sheetName := file.GetSheetName(0)
+	if sheetName == "" {
+		return nil, fmt.Errorf("no worksheet found")
+	}
+
+	rows, err := file.GetRows(sheetName)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("worksheet is empty")
+	}
+
+	headerIndex := map[string]int{}
+	for i, header := range rows[0] {
+		headerIndex[normalizeHeader(header)] = i
+	}
+
+	nameIdx, ok := headerIndex["employee name"]
+	if !ok {
+		return nil, fmt.Errorf("missing required column: employee name")
+	}
+
+	birthIdx := -1
+	if idx, ok := headerIndex["birth date"]; ok {
+		birthIdx = idx
+	}
+	if idx, ok := headerIndex["birthdate"]; ok && birthIdx == -1 {
+		birthIdx = idx
+	}
+	if idx, ok := headerIndex["birthday"]; ok && birthIdx == -1 {
+		birthIdx = idx
+	}
+	if birthIdx == -1 {
+		return nil, fmt.Errorf("missing required column: birth date")
+	}
+
+	var rowsOut []birthdateRow
+	for _, row := range rows[1:] {
+		name := cellValue(row, nameIdx)
+		_, _, timePunch, ok := splitTimePunchName(name)
+		if !ok {
+			continue
+		}
+		birthday := cellValue(row, birthIdx)
+		if birthday == "" {
+			continue
+		}
+		normalizedBirthday, ok := normalizeBirthday(birthday)
+		if !ok {
+			continue
+		}
+		rowsOut = append(rowsOut, birthdateRow{
+			TimePunchName: timePunch,
+			Birthday:      normalizedBirthday,
+		})
+	}
+
+	return rowsOut, nil
+}
+
 func normalizeHeader(header string) string {
 	return strings.ToLower(strings.TrimSpace(header))
 }
@@ -139,6 +212,37 @@ func isTerminated(status, terminationDate string) bool {
 		return true
 	}
 	return strings.Contains(status, "terminat") || strings.Contains(status, "inactive")
+}
+
+func normalizeBirthday(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+
+	dateFormats := []string{
+		"2006-01-02",
+		"1/2/2006",
+		"01/02/2006",
+		"1/2/06",
+		"01/02/06",
+		"1-2-2006",
+		"01-02-2006",
+		"1-2-06",
+		"01-02-06",
+	}
+
+	for _, format := range dateFormats {
+		if parsed, err := time.Parse(format, value); err == nil {
+			return parsed.Format("2006-01-02"), true
+		}
+	}
+
+	if parsed, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+		return parsed.Format("2006-01-02"), true
+	}
+
+	return "", false
 }
 
 func RegisterRoutes(app *vii.App) {
@@ -566,6 +670,60 @@ func RegisterRoutes(app *vii.App) {
 				continue
 			}
 			if err := data.DeleteEmployee(existing.ID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Import Employee Birthdates
+	app.At("POST /admin/locations/{id}/employees/birthdates/import", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		file, _, err := r.FormFile("birthdate_file")
+		if err != nil {
+			http.Error(w, "Birthdate XLSX file is required", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		birthdateRows, err := parseBirthdatesFromXLSX(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		existingEmployees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		existingByTimePunch := make(map[string]data.Employee, len(existingEmployees))
+		for _, emp := range existingEmployees {
+			key := canonicalTimePunchName(emp.FirstName, emp.LastName)
+			if emp.TimePunchName != "" {
+				key = canonicalTimePunchNameFromValue(emp.TimePunchName)
+			}
+			existingByTimePunch[key] = emp
+		}
+
+		for _, row := range birthdateRows {
+			existing, ok := existingByTimePunch[row.TimePunchName]
+			if !ok {
+				continue
+			}
+			if existing.Birthday == row.Birthday {
+				continue
+			}
+			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, row.Birthday, existing.Department); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}

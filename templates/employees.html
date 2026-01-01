@@ -44,6 +44,17 @@
         <button type="submit" style="background: #0d6efd; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Import Employees</button>
     </form>
 
+    <h3>Import Birthdates (.xlsx)</h3>
+    <form action="/admin/locations/{{ .Location.ID }}/employees/birthdates/import" method="POST" enctype="multipart/form-data" style="max-width: 500px; margin-bottom: 30px;">
+        <div style="margin-bottom: 10px;">
+            <input type="file" name="birthdate_file" accept=".xlsx" required>
+        </div>
+        <p style="margin: 0 0 10px 0; color: #555;">
+            Updates existing employees by name and sets their birthday from the file.
+        </p>
+        <button type="submit" style="background: #6f42c1; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Import Birthdates</button>
+    </form>
+
     <hr>
     <h3>Employee List ({{ len .Employees }} employees)</h3>
 
