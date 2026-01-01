@@ -24,54 +24,11 @@
     <a href="/admin/locations/{{ .Location.ID }}/labor/history" style="background: #17a2b8; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">View Performance History</a>
 
     <br><br>
+
+    <a href="/admin/locations/{{ .Location.ID }}/salaries" style="background: #ffc107; color: #212529; padding: 10px; text-decoration: none; border-radius: 5px;">Manage Salaries</a>
+    <a href="/admin/locations/{{ .Location.ID }}/payroll" style="background: #6f42c1; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">Payroll Events</a>
+
+    <br><br>
     <a href="/admin/locations/{{ .Location.ID }}/edit">Edit this Location</a>
-
-    <hr>
-    <h2>Annual Salaries</h2>
-    <p style="color: #666;">Salaries are divided by 365 and added to daily labor costs in all performance calculations.</p>
-
-    {{ if .Salaries }}
-    <table style="border-collapse: collapse; width: 100%; max-width: 600px; margin-bottom: 20px;">
-        <thead>
-            <tr style="background: #f2f2f2;">
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Name</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Annual</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Daily</th>
-                <th style="border: 1px solid #ddd; padding: 8px; text-align: center;">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{ range .Salaries }}
-            <tr>
-                <td style="border: 1px solid #ddd; padding: 8px;">{{ .Name }}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${{ printf "%.2f" .AnnualAmount }}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${{ printf "%.2f" .DailyAmount }}</td>
-                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">
-                    <form action="/admin/locations/{{ $.Location.ID }}/salaries/{{ .ID }}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Delete this salary?');">
-                        <button type="submit" style="background: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer;">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            {{ end }}
-        </tbody>
-    </table>
-    {{ else }}
-    <p><em>No salaries configured for this location.</em></p>
-    {{ end }}
-
-    <h3>Add New Salary</h3>
-    <form action="/admin/locations/{{ .Location.ID }}/salaries" method="POST" style="max-width: 400px;">
-        <div style="margin-bottom: 10px;">
-            <label>Name/Title:<br>
-                <input type="text" name="name" required style="width: 100%; padding: 5px;">
-            </label>
-        </div>
-        <div style="margin-bottom: 10px;">
-            <label>Annual Amount ($):<br>
-                <input type="number" name="annual_amount" step="0.01" min="0" required style="width: 100%; padding: 5px;">
-            </label>
-        </div>
-        <button type="submit" style="background: #28a745; color: white; border: none; padding: 10px 20px; cursor: pointer;">Add Salary</button>
-    </form>
 </body>
 </html>

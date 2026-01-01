@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annual Salaries - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; max-width: 700px; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .total-row { font-weight: bold; background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Annual Salaries</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <p style="color: #666;">Salaries are divided by 365 and added to daily labor costs in all performance calculations.</p>
+
+    {{ if .Salaries }}
+    <table>
+        <thead>
+            <tr>
+                <th>Name/Title</th>
+                <th style="text-align: right;">Annual Amount</th>
+                <th style="text-align: right;">Daily Cost</th>
+                <th style="text-align: center;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Salaries }}
+            <tr>
+                <td>{{ .Name }}</td>
+                <td style="text-align: right;">${{ printf "%.2f" .AnnualAmount }}</td>
+                <td style="text-align: right;">${{ printf "%.2f" .DailyAmount }}</td>
+                <td style="text-align: center;">
+                    <form action="/admin/locations/{{ $.Location.ID }}/salaries/{{ .ID }}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Delete this salary?');">
+                        <button type="submit" style="background: #dc3545; color: white; border: none; padding: 5px 15px; cursor: pointer;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{ end }}
+            <tr class="total-row">
+                <td>Total</td>
+                <td style="text-align: right;">${{ printf "%.2f" .TotalAnnual }}</td>
+                <td style="text-align: right;">${{ printf "%.2f" .TotalDaily }}</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    {{ else }}
+    <p><em>No salaries configured for this location.</em></p>
+    {{ end }}
+
+    <hr>
+    <h3>Add New Salary</h3>
+    <form action="/admin/locations/{{ .Location.ID }}/salaries" method="POST" style="max-width: 400px;">
+        <div style="margin-bottom: 10px;">
+            <label>Name/Title:<br>
+                <input type="text" name="name" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label>Annual Amount ($):<br>
+                <input type="number" name="annual_amount" step="0.01" min="0" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <button type="submit" style="background: #28a745; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Add Salary</button>
+    </form>
+</body>
+</html>

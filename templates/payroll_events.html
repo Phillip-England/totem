@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payroll Events - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .total-row { font-weight: bold; background-color: #f9f9f9; }
+        .filter-form { background: #eee; padding: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Payroll Events</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <p style="color: #666;">Payroll events (bonuses, vacation pay, backpay, etc.) are added to the labor wages for their specific date in performance calculations.</p>
+
+    <h3>Add New Payroll Event</h3>
+    <form action="/admin/locations/{{ .Location.ID }}/payroll" method="POST" style="max-width: 500px; margin-bottom: 30px;">
+        <div style="margin-bottom: 10px;">
+            <label>Date:<br>
+                <input type="date" name="date" required style="width: 100%; padding: 8px; box-sizing: border-box;" value="{{ .Today }}">
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Type:<br>
+                <select name="event_type" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+                    {{ range .EventTypes }}
+                    <option value="{{ . }}">{{ . }}</option>
+                    {{ end }}
+                </select>
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Description:<br>
+                <input type="text" name="description" required style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="e.g., John Smith - Holiday Bonus">
+            </label>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label>Amount ($):<br>
+                <input type="number" name="amount" step="0.01" min="0" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <button type="submit" style="background: #28a745; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Add Payroll Event</button>
+    </form>
+
+    <hr>
+    <h3>Payroll Event History</h3>
+
+    <!-- Filter Form -->
+    <form action="/admin/locations/{{ .Location.ID }}/payroll" method="GET" class="filter-form">
+        <label>Start Date: <input type="date" name="start" value="{{ .StartDate }}"></label>
+        <label>End Date: <input type="date" name="end" value="{{ .EndDate }}"></label>
+        <input type="submit" value="Filter">
+        <a href="/admin/locations/{{ .Location.ID }}/payroll" style="margin-left: 10px;">Clear Filter</a>
+        <br><br>
+        <strong>Quick Ranges: </strong>
+        <a href="?start={{ .Ranges.MonthStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Current Month</a>
+        <a href="?start={{ .Ranges.NinetyStart }}&end={{ .Ranges.Today }}" style="margin-right: 10px;">Last 90 Days</a>
+        <a href="?start={{ .Ranges.YTDStart }}&end={{ .Ranges.Today }}">Year to Date</a>
+    </form>
+
+    {{ if .Events }}
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th style="text-align: right;">Amount</th>
+                <th style="text-align: center;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Events }}
+            <tr>
+                <td>{{ .Date }}</td>
+                <td><strong>{{ .EventType }}</strong></td>
+                <td>{{ .Description }}</td>
+                <td style="text-align: right;">${{ printf "%.2f" .Amount }}</td>
+                <td style="text-align: center;">
+                    <form action="/admin/locations/{{ $.Location.ID }}/payroll/{{ .ID }}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Delete this payroll event?');">
+                        <button type="submit" style="background: #dc3545; color: white; border: none; padding: 5px 15px; cursor: pointer;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{ end }}
+            <tr class="total-row">
+                <td colspan="3">Total ({{ len .Events }} events)</td>
+                <td style="text-align: right;">${{ printf "%.2f" .TotalAmount }}</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    {{ else }}
+    <p><em>No payroll events found for the selected date range.</em></p>
+    {{ end }}
+
+</body>
+</html>

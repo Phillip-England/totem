@@ -90,16 +90,10 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Location not found", http.StatusNotFound)
 			return
 		}
-		salaries, err := data.GetSalariesByLocation(id)
-		if err != nil {
-			salaries = []data.Salary{}
-		}
 		templateData := struct {
 			Location data.CfaLocation
-			Salaries []data.Salary
 		}{
 			Location: loc,
-			Salaries: salaries,
 		}
 		err = vii.ExecuteTemplate(w, r, "location_details.html", templateData)
 		if err != nil {
@@ -137,6 +131,45 @@ func RegisterRoutes(app *vii.App) {
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	})
 
+	// Salaries Page
+	app.At("GET /admin/locations/{id}/salaries", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+		salaries, err := data.GetSalariesByLocation(id)
+		if err != nil {
+			salaries = []data.Salary{}
+		}
+		var totalAnnual, totalDaily float64
+		for _, s := range salaries {
+			totalAnnual += s.AnnualAmount
+			totalDaily += s.DailyAmount
+		}
+		templateData := struct {
+			Location    data.CfaLocation
+			Salaries    []data.Salary
+			TotalAnnual float64
+			TotalDaily  float64
+		}{
+			Location:    loc,
+			Salaries:    salaries,
+			TotalAnnual: totalAnnual,
+			TotalDaily:  totalDaily,
+		}
+		err = vii.ExecuteTemplate(w, r, "salaries.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
 	// Create Salary
 	app.At("POST /admin/locations/{id}/salaries", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
@@ -157,7 +190,7 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/salaries", http.StatusSeeOther)
 	})
 
 	// Delete Salary
@@ -174,7 +207,110 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/salaries", http.StatusSeeOther)
+	})
+
+	// Payroll Events Page
+	app.At("GET /admin/locations/{id}/payroll", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+
+		startDate := r.URL.Query().Get("start")
+		endDate := r.URL.Query().Get("end")
+
+		// Default to last 90 days if no filter
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
+
+		events, err := data.GetPayrollEventsByLocation(id, startDate, endDate)
+		if err != nil {
+			events = []data.PayrollEvent{}
+		}
+
+		var totalAmount float64
+		for _, e := range events {
+			totalAmount += e.Amount
+		}
+
+		ranges := getCommonRanges()
+
+		templateData := struct {
+			Location    data.CfaLocation
+			Events      []data.PayrollEvent
+			EventTypes  []string
+			StartDate   string
+			EndDate     string
+			Today       string
+			TotalAmount float64
+			Ranges      struct{ MonthStart, NinetyStart, YTDStart, Today string }
+		}{
+			Location:    loc,
+			Events:      events,
+			EventTypes:  data.PayrollEventTypes,
+			StartDate:   startDate,
+			EndDate:     endDate,
+			Today:       time.Now().Format("2006-01-02"),
+			TotalAmount: totalAmount,
+			Ranges:      ranges,
+		}
+		err = vii.ExecuteTemplate(w, r, "payroll_events.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Create Payroll Event
+	app.At("POST /admin/locations/{id}/payroll", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		date := r.FormValue("date")
+		eventType := r.FormValue("event_type")
+		description := r.FormValue("description")
+		amountStr := r.FormValue("amount")
+		amount, err := strconv.ParseFloat(amountStr, 64)
+		if err != nil || date == "" || eventType == "" || description == "" {
+			http.Error(w, "Invalid input", http.StatusBadRequest)
+			return
+		}
+		err = data.CreatePayrollEvent(id, date, eventType, description, amount)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/payroll", http.StatusSeeOther)
+	})
+
+	// Delete Payroll Event
+	app.At("POST /admin/locations/{id}/payroll/{eventId}/delete", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		eventIdStr := r.PathValue("eventId")
+		eventId, err := strconv.Atoi(eventIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Event ID", http.StatusBadRequest)
+			return
+		}
+		err = data.DeletePayrollEvent(eventId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/payroll", http.StatusSeeOther)
 	})
 
 	// Edit Location Form
