@@ -708,64 +708,72 @@ func RegisterRoutes(app *vii.App) {
 						return
 					}
 			
-							// Calculate Range Summary
-							var rangeTotalSales, rangeTotalHours, rangeTotalWages, rangeTotalOTHours float64
-							var businessDays int
-							for _, r := range records {
-								rangeTotalSales += r.TotalSales
-								rangeTotalHours += r.TotalHours
-								rangeTotalWages += r.TotalWages
-								rangeTotalOTHours += r.OvertimeHours
-								if r.HasSales && r.HasLabor {
-									businessDays++
-								}
-							}
-							rangeProd := 0.0
-							if rangeTotalHours > 0 { rangeProd = rangeTotalSales / rangeTotalHours }
-							rangeLabPct := 0.0
-							if rangeTotalSales > 0 { rangeLabPct = (rangeTotalWages / rangeTotalSales) * 100 }
-					
-							ranges := getCommonRanges()
-					
-							templateData := struct {
-								Location  data.CfaLocation
-								Records   []data.DailyPerformanceRecord
-								StartDate string
-								EndDate   string
-								Ranges    interface{}
-								Summary   interface{}
-							}{
-								Location:  loc,
-								Records:   records,
-								StartDate: startDate,
-								EndDate:   endDate,
-								Ranges:    ranges,
-								Summary: struct {
-									Sales        float64
-									Hours        float64
-									OTHours      float64
-									Wages        float64
-									Productivity float64
-									LaborPercent float64
-									BusinessDays int
-								}{
-									Sales:        rangeTotalSales,
-									Hours:        rangeTotalHours,
-									OTHours:      rangeTotalOTHours,
-									Wages:        rangeTotalWages,
-									Productivity: rangeProd,
-									LaborPercent: rangeLabPct,
-									BusinessDays: businessDays,
-								},
-							}
-			
-			err = vii.ExecuteTemplate(w, r, "labor_history.html", templateData)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
+									// Calculate Range Summary
+									summary := data.CalculateSummary(records)
+							
+									ranges := getCommonRanges()
+							
+									templateData := struct {
+										Location  data.CfaLocation
+										Records   []data.DailyPerformanceRecord
+										StartDate string
+										EndDate   string
+										Ranges    interface{}
+										Summary   data.PerformanceSummary
+									}{
+										Location:  loc,
+										Records:   records,
+										StartDate: startDate,
+										EndDate:   endDate,
+										Ranges:    ranges,
+										Summary:   summary,
+									}
+							
+									err = vii.ExecuteTemplate(w, r, "labor_history.html", templateData)
+									if err != nil {
+										http.Error(w, err.Error(), http.StatusInternalServerError)
+									}
+								})
+							
+								// API: Performance Summary
+								app.At("GET /api/locations/{id}/performance", func(w http.ResponseWriter, r *http.Request) {
+									idStr := r.PathValue("id")
+									id, err := strconv.Atoi(idStr)
+									if err != nil {
+										app.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+										return
+									}
+							
+									startDate := r.URL.Query().Get("start")
+									endDate := r.URL.Query().Get("end")
+							
+									// Default to today if no range provided? Or last 90?
+									// For API, explicit or empty (all) is usually better, but let's match the UI behavior for consistency if not specified.
+									// Actually, standard API: if not specified, maybe just today?
+									// Let's use the same default: 90 days.
+									if startDate == "" && endDate == "" {
+										now := time.Now()
+										endDate = now.Format("2006-01-02")
+										startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+									}
+							
+									records, err := data.GetPerformanceReport(id, startDate, endDate)
+									if err != nil {
+										app.JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+										return
+									}
+							
+									summary := data.CalculateSummary(records)
+		app.JSON(w, http.StatusOK, map[string]interface{}{
+			"summary":   summary,
+			"records":   records,
+			"startDate": startDate,
+			"endDate":   endDate,
 		})
-	}		
-		func getCommonRanges() struct{ MonthStart, NinetyStart, YTDStart, Today string } {
+	})
+}
+
+func getCommonRanges() struct{ MonthStart, NinetyStart, YTDStart, Today string } {
 			now := time.Now()
 			today := now.Format("2006-01-02")
 		
