@@ -36,7 +36,7 @@
                 {{ range .DayParts }}
                 <div class="form-row">
                     <label>{{ . }}</label>
-                    <input type="number" step="0.01" min="0" name="daypart|{{ . }}" placeholder="0.00">
+                    <input type="number" step="0.01" min="0" name="daypart|{{ . }}" placeholder="0.00" {{ if index $.DayPartValues . }}value="{{ printf "%.2f" (index $.DayPartValues .) }}"{{ end }}>
                 </div>
                 {{ end }}
             </div>
@@ -47,7 +47,7 @@
                 {{ range .Destinations }}
                 <div class="form-row">
                     <label>{{ . }}</label>
-                    <input type="number" step="0.01" min="0" name="destination|{{ . }}" placeholder="0.00">
+                    <input type="number" step="0.01" min="0" name="destination|{{ . }}" placeholder="0.00" {{ if index $.DestinationValues . }}value="{{ printf "%.2f" (index $.DestinationValues .) }}"{{ end }}>
                 </div>
                 {{ end }}
             </div>

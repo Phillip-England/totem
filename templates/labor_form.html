@@ -26,22 +26,22 @@
         <h3>Manual Entry</h3>
         <div style="margin-bottom: 10px;">
             <label>Regular Hours:</label>
-            <input type="number" step="0.01" min="0" name="regular" placeholder="0.00">
+            <input type="number" step="0.01" min="0" name="regular" placeholder="0.00" {{ if gt .Existing.RegularHours 0.0 }}value="{{ printf "%.2f" .Existing.RegularHours }}"{{ end }}>
         </div>
 
         <div style="margin-bottom: 10px;">
             <label>Regular Wages ($):</label>
-            <input type="number" step="0.01" min="0" name="regular_wages" placeholder="0.00">
+            <input type="number" step="0.01" min="0" name="regular_wages" placeholder="0.00" {{ if gt .Existing.RegularWages 0.0 }}value="{{ printf "%.2f" .Existing.RegularWages }}"{{ end }}>
         </div>
 
         <div style="margin-bottom: 10px;">
             <label>Overtime Hours:</label>
-            <input type="number" step="0.01" min="0" name="overtime" placeholder="0.00">
+            <input type="number" step="0.01" min="0" name="overtime" placeholder="0.00" {{ if gt .Existing.OvertimeHours 0.0 }}value="{{ printf "%.2f" .Existing.OvertimeHours }}"{{ end }}>
         </div>
 
         <div style="margin-bottom: 20px;">
             <label>Overtime Wages ($):</label>
-            <input type="number" step="0.01" min="0" name="overtime_wages" placeholder="0.00">
+            <input type="number" step="0.01" min="0" name="overtime_wages" placeholder="0.00" {{ if gt .Existing.OvertimeWages 0.0 }}value="{{ printf "%.2f" .Existing.OvertimeWages }}"{{ end }}>
         </div>
 
         <input type="submit" value="Save Labor Data">

@@ -238,16 +238,32 @@ func RegisterRoutes(app *vii.App) {
 			today = time.Now().Format("2006-01-02")
 		}
 
+		// Fetch existing sales data for this date
+		existingSales, _ := data.GetSalesByDate(id, today)
+		dayPartValues := make(map[string]float64)
+		destinationValues := make(map[string]float64)
+		for _, sale := range existingSales {
+			if sale.Category == "DayPart" {
+				dayPartValues[sale.Item] = sale.Amount
+			} else if sale.Category == "Destination" {
+				destinationValues[sale.Item] = sale.Amount
+			}
+		}
+
 		templateData := struct {
-			Location     data.CfaLocation
-			DayParts     []string
-			Destinations []string
-			Today        string
+			Location          data.CfaLocation
+			DayParts          []string
+			Destinations      []string
+			Today             string
+			DayPartValues     map[string]float64
+			DestinationValues map[string]float64
 		}{
-			Location:     loc,
-			DayParts:     data.DayParts,
-			Destinations: data.Destinations,
-			Today:        today,
+			Location:          loc,
+			DayParts:          data.DayParts,
+			Destinations:      data.Destinations,
+			Today:             today,
+			DayPartValues:     dayPartValues,
+			DestinationValues: destinationValues,
 		}
 		err = vii.ExecuteTemplate(w, r, "sales_form.html", templateData)
 		if err != nil {
@@ -637,12 +653,17 @@ func RegisterRoutes(app *vii.App) {
 			today = time.Now().Format("2006-01-02")
 		}
 
+		// Fetch existing labor data for this date
+		existingLabor, _ := data.GetLaborByDate(id, today)
+
 		templateData := struct {
 			Location data.CfaLocation
 			Today    string
+			Existing data.LaborRecord
 		}{
 			Location: loc,
 			Today:    today,
+			Existing: existingLabor,
 		}
 		err = vii.ExecuteTemplate(w, r, "labor_form.html", templateData)
 		if err != nil {
