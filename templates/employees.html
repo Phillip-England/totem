@@ -55,6 +55,17 @@
         <button type="submit" style="background: #6f42c1; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Import Birthdates</button>
     </form>
 
+    <h3>Import Departments (HotSchedules HTML)</h3>
+    <form action="/admin/locations/{{ .Location.ID }}/employees/departments/import" method="POST" style="max-width: 700px; margin-bottom: 30px;">
+        <div style="margin-bottom: 10px;">
+            <textarea name="department_html" rows="10" required style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Paste the HotSchedules staff list HTML here."></textarea>
+        </div>
+        <p style="margin: 0 0 10px 0; color: #555;">
+            Matches employees by name and updates the department based on the JOBS column mapping.
+        </p>
+        <button type="submit" style="background: #198754; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Import Departments</button>
+    </form>
+
     <hr>
     <h3>Employee List ({{ len .Employees }} employees)</h3>
 

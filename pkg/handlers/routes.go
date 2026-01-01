@@ -1,15 +1,21 @@
 package handlers
 
 import (
+	"bytes"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/PuerkitoBio/goquery"
+	"github.com/extrame/xls"
 	"github.com/phillip-england/totem/pkg/data"
 	"github.com/phillip-england/vii"
 	"github.com/xuri/excelize/v2"
@@ -22,24 +28,10 @@ type bioEmployeeRow struct {
 	Terminated    bool
 }
 
-func parseBioEmployeesFromXLSX(reader io.Reader) ([]bioEmployeeRow, error) {
-	file, err := excelize.OpenReader(reader)
+func parseBioEmployeesFromSpreadsheet(reader io.Reader, filename string) ([]bioEmployeeRow, error) {
+	rows, err := readRowsFromSpreadsheet(reader, filename)
 	if err != nil {
 		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-
-	sheetName := file.GetSheetName(0)
-	if sheetName == "" {
-		return nil, fmt.Errorf("no worksheet found")
-	}
-
-	rows, err := file.GetRows(sheetName)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("worksheet is empty")
 	}
 
 	headerIndex := map[string]int{}
@@ -85,24 +77,10 @@ type birthdateRow struct {
 	Birthday      string
 }
 
-func parseBirthdatesFromXLSX(reader io.Reader) ([]birthdateRow, error) {
-	file, err := excelize.OpenReader(reader)
+func parseBirthdatesFromSpreadsheet(reader io.Reader, filename string) ([]birthdateRow, error) {
+	rows, err := readRowsFromSpreadsheet(reader, filename)
 	if err != nil {
 		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-
-	sheetName := file.GetSheetName(0)
-	if sheetName == "" {
-		return nil, fmt.Errorf("no worksheet found")
-	}
-
-	rows, err := file.GetRows(sheetName)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("worksheet is empty")
 	}
 
 	headerIndex := map[string]int{}
@@ -148,6 +126,83 @@ func parseBirthdatesFromXLSX(reader io.Reader) ([]birthdateRow, error) {
 			TimePunchName: timePunch,
 			Birthday:      normalizedBirthday,
 		})
+	}
+
+	return rowsOut, nil
+}
+
+type hsJobRow struct {
+	FirstName     string
+	LastName      string
+	PreferredName string
+	Department    string
+}
+
+func parseHotSchedulesDepartmentsFromHTML(value string) ([]hsJobRow, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, fmt.Errorf("hot schedules html is required")
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(trimmed))
+	if err != nil {
+		return nil, err
+	}
+
+	rows := doc.Find("#stafftable tbody tr")
+	if rows.Length() == 0 {
+		rows = doc.Find("table#stafftable tr")
+	}
+	if rows.Length() == 0 {
+		rows = doc.Find("table.data-table tbody tr")
+	}
+	if rows.Length() == 0 {
+		return nil, fmt.Errorf("could not find employee table rows")
+	}
+
+	var rowsOut []hsJobRow
+	rows.Each(func(_ int, row *goquery.Selection) {
+		cells := row.Find("td")
+		if cells.Length() < 7 {
+			return
+		}
+		nameCell := cells.Eq(1)
+		name := strings.TrimSpace(nameCell.Find("a").First().Text())
+		if name == "" {
+			name = strings.TrimSpace(nameCell.Text())
+		}
+		name = strings.Join(strings.Fields(name), " ")
+		first, last, ok := splitFirstLastFromDisplayName(name)
+		if !ok {
+			return
+		}
+
+		preferred := strings.TrimSpace(cells.Eq(2).Text())
+		preferred = strings.Join(strings.Fields(preferred), " ")
+		if preferred == "-" {
+			preferred = ""
+		}
+
+		jobCell := cells.Eq(6)
+		jobs := extractHotSchedulesJobs(jobCell)
+		if len(jobs) == 0 {
+			return
+		}
+
+		department, ok := mapDepartmentFromJobs(strings.Join(jobs, " | "))
+		if !ok {
+			return
+		}
+		rowsOut = append(rowsOut, hsJobRow{
+			FirstName:     first,
+			LastName:      last,
+			PreferredName: preferred,
+			Department:    department,
+		})
+	})
+
+	if len(rowsOut) == 0 {
+		return nil, fmt.Errorf("no mappable employees found in html")
 	}
 
 	return rowsOut, nil
@@ -240,6 +295,204 @@ func normalizeBirthday(value string) (string, bool) {
 
 	if parsed, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
 		return parsed.Format("2006-01-02"), true
+	}
+
+	return "", false
+}
+
+func splitFirstLastFromDisplayName(name string) (string, string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", "", false
+	}
+
+	if strings.Contains(trimmed, ",") {
+		parts := strings.SplitN(trimmed, ",", 2)
+		last := strings.TrimSpace(parts[0])
+		first := strings.TrimSpace(parts[1])
+		if first == "" || last == "" {
+			return "", "", false
+		}
+		return first, last, true
+	}
+
+	fields := strings.Fields(trimmed)
+	if len(fields) < 2 {
+		return "", "", false
+	}
+	first := fields[0]
+	last := strings.Join(fields[1:], " ")
+	return first, last, true
+}
+
+func normalizeNameKey(first, last string) string {
+	first = normalizeFirstName(first)
+	last = normalizeLastName(last)
+	if first == "" || last == "" {
+		return ""
+	}
+	return last + "|" + first
+}
+
+func normalizeFirstName(value string) string {
+	value = stripParenthetical(value)
+	value = normalizeNameText(value)
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+func normalizeLastName(value string) string {
+	value = normalizeNameText(value)
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func normalizeNameText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	lastWasSpace := false
+	for _, r := range value {
+		if unicode.IsLetter(r) {
+			b.WriteRune(r)
+			lastWasSpace = false
+			continue
+		}
+		if !lastWasSpace {
+			b.WriteByte(' ')
+			lastWasSpace = true
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func stripParenthetical(value string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range value {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return b.String()
+}
+
+func extractHotSchedulesJobs(cell *goquery.Selection) []string {
+	var jobs []string
+	tooltip := ""
+	cell.Find("[tooltip]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		if value, ok := s.Attr("tooltip"); ok && strings.TrimSpace(value) != "" {
+			tooltip = value
+			return false
+		}
+		return true
+	})
+
+	if tooltip != "" {
+		decoded := html.UnescapeString(tooltip)
+		if doc, err := goquery.NewDocumentFromReader(strings.NewReader(decoded)); err == nil {
+			doc.Find("li").Each(func(_ int, li *goquery.Selection) {
+				text := strings.Join(strings.Fields(li.Text()), " ")
+				if text != "" {
+					jobs = append(jobs, text)
+				}
+			})
+		}
+	}
+
+	if len(jobs) == 0 {
+		text := strings.Join(strings.Fields(cell.Text()), " ")
+		if text != "" && text != "-" {
+			jobs = append(jobs, text)
+		}
+	}
+
+	return jobs
+}
+
+func readRowsFromSpreadsheet(reader io.Reader, filename string) ([][]string, error) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".xls":
+		workbook, err := xls.OpenReader(bytes.NewReader(data), "utf-8")
+		if err != nil {
+			return nil, err
+		}
+		if workbook.NumSheets() == 0 {
+			return nil, fmt.Errorf("no worksheet found")
+		}
+		if workbook.NumSheets() > 1 {
+			return nil, fmt.Errorf("multiple worksheets found; please upload a file with a single sheet")
+		}
+		rows := workbook.ReadAllCells(100000)
+		if len(rows) == 0 {
+			return nil, fmt.Errorf("worksheet is empty")
+		}
+		return rows, nil
+	default:
+		file, err := excelize.OpenReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = file.Close() }()
+
+		sheetName := file.GetSheetName(0)
+		if sheetName == "" {
+			return nil, fmt.Errorf("no worksheet found")
+		}
+
+		rows, err := file.GetRows(sheetName)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) == 0 {
+			return nil, fmt.Errorf("worksheet is empty")
+		}
+		return rows, nil
+	}
+}
+
+func mapDepartmentFromJobs(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", false
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "-" {
+		return "NONE", true
+	}
+
+	mappings := []struct {
+		Department string
+		Job        string
+	}{
+		{Department: "PARTNER", Job: "Dispatcher"},
+		{Department: "EXECUTIVE", Job: "Mobile Drinks"},
+		{Department: "CENTRAL", Job: "Lemons"},
+		{Department: "DIRECTOR", Job: "Front Counter Stager"},
+		{Department: "BOH", Job: "BOH General"},
+		{Department: "FOH", Job: "FOH General"},
+	}
+
+	for _, mapping := range mappings {
+		if strings.Contains(lower, strings.ToLower(mapping.Job)) {
+			return mapping.Department, true
+		}
 	}
 
 	return "", false
@@ -607,14 +860,14 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 
-		file, _, err := r.FormFile("bio_file")
+		file, header, err := r.FormFile("bio_file")
 		if err != nil {
 			http.Error(w, "Bio XLSX file is required", http.StatusBadRequest)
 			return
 		}
 		defer file.Close()
 
-		bioEmployees, err := parseBioEmployeesFromXLSX(file)
+		bioEmployees, err := parseBioEmployeesFromSpreadsheet(file, header.Filename)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -687,14 +940,14 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 
-		file, _, err := r.FormFile("birthdate_file")
+		file, header, err := r.FormFile("birthdate_file")
 		if err != nil {
 			http.Error(w, "Birthdate XLSX file is required", http.StatusBadRequest)
 			return
 		}
 		defer file.Close()
 
-		birthdateRows, err := parseBirthdatesFromXLSX(file)
+		birthdateRows, err := parseBirthdatesFromSpreadsheet(file, header.Filename)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -724,6 +977,71 @@ func RegisterRoutes(app *vii.App) {
 				continue
 			}
 			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, row.Birthday, existing.Department); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Import Employee Departments from HotSchedules
+	app.At("POST /admin/locations/{id}/employees/departments/import", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		htmlValue := r.FormValue("department_html")
+		departmentRows, err := parseHotSchedulesDepartmentsFromHTML(htmlValue)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		existingEmployees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		existingByTimePunch := make(map[string]data.Employee, len(existingEmployees))
+		existingByNameKey := make(map[string]data.Employee, len(existingEmployees))
+		for _, emp := range existingEmployees {
+			key := canonicalTimePunchName(emp.FirstName, emp.LastName)
+			if emp.TimePunchName != "" {
+				key = canonicalTimePunchNameFromValue(emp.TimePunchName)
+			}
+			existingByTimePunch[key] = emp
+			nameKey := normalizeNameKey(emp.FirstName, emp.LastName)
+			if nameKey != "" {
+				existingByNameKey[nameKey] = emp
+			}
+		}
+
+		for _, row := range departmentRows {
+			primaryKey := normalizeNameKey(row.FirstName, row.LastName)
+			preferredKey := ""
+			if row.PreferredName != "" {
+				preferredKey = normalizeNameKey(row.PreferredName, row.LastName)
+			}
+			existing, ok := existingByNameKey[primaryKey]
+			if !ok && preferredKey != "" {
+				existing, ok = existingByNameKey[preferredKey]
+			}
+			if !ok {
+				timePunch := canonicalTimePunchName(row.FirstName, row.LastName)
+				existing, ok = existingByTimePunch[timePunch]
+			}
+			if !ok {
+				continue
+			}
+			if existing.Department == row.Department {
+				continue
+			}
+			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, existing.Birthday, row.Department); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
