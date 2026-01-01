@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sort"
@@ -10,7 +12,134 @@ import (
 
 	"github.com/phillip-england/totem/pkg/data"
 	"github.com/phillip-england/vii"
+	"github.com/xuri/excelize/v2"
 )
+
+type bioEmployeeRow struct {
+	FirstName     string
+	LastName      string
+	TimePunchName string
+	Terminated    bool
+}
+
+func parseBioEmployeesFromXLSX(reader io.Reader) ([]bioEmployeeRow, error) {
+	file, err := excelize.OpenReader(reader)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+
+	sheetName := file.GetSheetName(0)
+	if sheetName == "" {
+		return nil, fmt.Errorf("no worksheet found")
+	}
+
+	rows, err := file.GetRows(sheetName)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("worksheet is empty")
+	}
+
+	headerIndex := map[string]int{}
+	for i, header := range rows[0] {
+		headerIndex[normalizeHeader(header)] = i
+	}
+
+	nameIdx, ok := headerIndex["employee name"]
+	if !ok {
+		return nil, fmt.Errorf("missing required column: employee name")
+	}
+	statusIdx := -1
+	if idx, ok := headerIndex["employee status"]; ok {
+		statusIdx = idx
+	}
+	termDateIdx := -1
+	if idx, ok := headerIndex["termination date"]; ok {
+		termDateIdx = idx
+	}
+
+	var employees []bioEmployeeRow
+	for _, row := range rows[1:] {
+		name := cellValue(row, nameIdx)
+		first, last, timePunch, ok := splitTimePunchName(name)
+		if !ok {
+			continue
+		}
+		status := cellValue(row, statusIdx)
+		termDate := cellValue(row, termDateIdx)
+		employees = append(employees, bioEmployeeRow{
+			FirstName:     first,
+			LastName:      last,
+			TimePunchName: timePunch,
+			Terminated:    isTerminated(status, termDate),
+		})
+	}
+
+	return employees, nil
+}
+
+func normalizeHeader(header string) string {
+	return strings.ToLower(strings.TrimSpace(header))
+}
+
+func cellValue(row []string, idx int) string {
+	if idx < 0 || idx >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[idx])
+}
+
+func splitTimePunchName(name string) (string, string, string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", "", "", false
+	}
+
+	if strings.Contains(trimmed, ",") {
+		parts := strings.SplitN(trimmed, ",", 2)
+		last := strings.TrimSpace(parts[0])
+		first := strings.TrimSpace(parts[1])
+		if first == "" || last == "" {
+			return "", "", "", false
+		}
+		return first, last, canonicalTimePunchName(first, last), true
+	}
+
+	fields := strings.Fields(trimmed)
+	if len(fields) < 2 {
+		return "", "", "", false
+	}
+	first := fields[0]
+	last := fields[len(fields)-1]
+	return first, last, canonicalTimePunchName(first, last), true
+}
+
+func canonicalTimePunchName(firstName, lastName string) string {
+	return strings.ToLower(strings.TrimSpace(lastName)) + ", " + strings.ToLower(strings.TrimSpace(firstName))
+}
+
+func canonicalTimePunchNameFromValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	_, _, timePunch, ok := splitTimePunchName(trimmed)
+	if ok {
+		return timePunch
+	}
+	return strings.ToLower(trimmed)
+}
+
+func isTerminated(status, terminationDate string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	terminationDate = strings.TrimSpace(terminationDate)
+	if terminationDate != "" {
+		return true
+	}
+	return strings.Contains(status, "terminat") || strings.Contains(status, "inactive")
+}
 
 func RegisterRoutes(app *vii.App) {
 	app.At("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -311,6 +440,219 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 		http.Redirect(w, r, "/admin/locations/"+idStr+"/payroll", http.StatusSeeOther)
+	})
+
+	// Employees Page
+	app.At("GET /admin/locations/{id}/employees", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+		employees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			employees = []data.Employee{}
+		}
+		templateData := struct {
+			Location  data.CfaLocation
+			Employees []data.Employee
+		}{
+			Location:  loc,
+			Employees: employees,
+		}
+		err = vii.ExecuteTemplate(w, r, "employees.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Create Employee
+	app.At("POST /admin/locations/{id}/employees", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		firstName := r.FormValue("first_name")
+		lastName := r.FormValue("last_name")
+		if firstName == "" || lastName == "" {
+			http.Error(w, "First name and last name are required", http.StatusBadRequest)
+			return
+		}
+		err = data.CreateEmployee(id, firstName, lastName)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Import Employees from Bio XLSX
+	app.At("POST /admin/locations/{id}/employees/import", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		file, _, err := r.FormFile("bio_file")
+		if err != nil {
+			http.Error(w, "Bio XLSX file is required", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		bioEmployees, err := parseBioEmployeesFromXLSX(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		existingEmployees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		existingByTimePunch := make(map[string]data.Employee, len(existingEmployees))
+		for _, emp := range existingEmployees {
+			key := canonicalTimePunchName(emp.FirstName, emp.LastName)
+			if emp.TimePunchName != "" {
+				key = canonicalTimePunchNameFromValue(emp.TimePunchName)
+			}
+			existingByTimePunch[key] = emp
+		}
+
+		activeByTimePunch := make(map[string]bioEmployeeRow)
+		for _, emp := range bioEmployees {
+			if emp.Terminated {
+				continue
+			}
+			activeByTimePunch[emp.TimePunchName] = emp
+		}
+
+		for key, emp := range activeByTimePunch {
+			if existing, ok := existingByTimePunch[key]; ok {
+				if existing.FirstName != emp.FirstName || existing.LastName != emp.LastName {
+					err := data.UpdateEmployee(existing.ID, emp.FirstName, emp.LastName, existing.Birthday, existing.Department)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+				}
+				continue
+			}
+			err := data.CreateEmployee(id, emp.FirstName, emp.LastName)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		for _, existing := range existingEmployees {
+			key := canonicalTimePunchName(existing.FirstName, existing.LastName)
+			if existing.TimePunchName != "" {
+				key = canonicalTimePunchNameFromValue(existing.TimePunchName)
+			}
+			if _, ok := activeByTimePunch[key]; ok {
+				continue
+			}
+			if err := data.DeleteEmployee(existing.ID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Edit Employee Form
+	app.At("GET /admin/locations/{id}/employees/{empId}/edit", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		empIdStr := r.PathValue("empId")
+		empId, err := strconv.Atoi(empIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Employee ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+		employee, err := data.GetEmployeeByID(empId)
+		if err != nil {
+			http.Error(w, "Employee not found", http.StatusNotFound)
+			return
+		}
+		templateData := struct {
+			Location    data.CfaLocation
+			Employee    data.Employee
+			Departments []string
+		}{
+			Location:    loc,
+			Employee:    employee,
+			Departments: data.Departments,
+		}
+		err = vii.ExecuteTemplate(w, r, "employee_edit.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// Update Employee
+	app.At("POST /admin/locations/{id}/employees/{empId}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		empIdStr := r.PathValue("empId")
+		empId, err := strconv.Atoi(empIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Employee ID", http.StatusBadRequest)
+			return
+		}
+		firstName := r.FormValue("first_name")
+		lastName := r.FormValue("last_name")
+		birthday := r.FormValue("birthday")
+		department := r.FormValue("department")
+		if firstName == "" || lastName == "" {
+			http.Error(w, "First name and last name are required", http.StatusBadRequest)
+			return
+		}
+		err = data.UpdateEmployee(empId, firstName, lastName, birthday, department)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Delete Employee
+	app.At("POST /admin/locations/{id}/employees/{empId}/delete", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		empIdStr := r.PathValue("empId")
+		empId, err := strconv.Atoi(empIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Employee ID", http.StatusBadRequest)
+			return
+		}
+		err = data.DeleteEmployee(empId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
 	})
 
 	// Edit Location Form

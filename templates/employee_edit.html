@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Employee - {{ .Employee.FirstName }} {{ .Employee.LastName }}</title>
+</head>
+<body>
+    <h1>Edit Employee</h1>
+    <h2>{{ .Employee.FirstName }} {{ .Employee.LastName }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}/employees">Back to Employees</a>
+    <hr>
+
+    <form action="/admin/locations/{{ .Location.ID }}/employees/{{ .Employee.ID }}" method="POST" style="max-width: 400px;">
+        <div style="margin-bottom: 10px;">
+            <label>First Name:<br>
+                <input type="text" name="first_name" required value="{{ .Employee.FirstName }}" style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Last Name:<br>
+                <input type="text" name="last_name" required value="{{ .Employee.LastName }}" style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Time Punch Name (auto-generated):<br>
+                <input type="text" value="{{ .Employee.TimePunchName }}" disabled style="width: 100%; padding: 8px; box-sizing: border-box; background: #eee;">
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label>Department:<br>
+                <select name="department" style="width: 100%; padding: 8px; box-sizing: border-box;">
+                    {{ range $.Departments }}
+                    <option value="{{ . }}" {{ if eq . $.Employee.Department }}selected{{ end }}>{{ . }}</option>
+                    {{ end }}
+                </select>
+            </label>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label>Birthday:<br>
+                <input type="date" name="birthday" value="{{ .Employee.Birthday }}" style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <button type="submit" style="background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Save Changes</button>
+        <a href="/admin/locations/{{ .Location.ID }}/employees" style="margin-left: 10px;">Cancel</a>
+    </form>
+</body>
+</html>
