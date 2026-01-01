@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historical Sales - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .date-section { margin-top: 40px; border-top: 2px solid #333; padding-top: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        h3 { margin-top: 0; }
+        .total-row { font-weight: bold; background-color: #fafafa; }
+    </style>
+</head>
+<body>
+    <h1>Historical Sales Data</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    {{ range $date, $categories := .History }}
+    <div class="date-section">
+        <h2>Date: {{ $date }}</h2>
+        <div class="grid">
+            <!-- Day Parts -->
+            <div class="section">
+                <h3>Day Part Sales</h3>
+                <table>
+                    <thead>
+                        <tr><th>Item</th><th>Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {{ range (index $categories "DayPart") }}
+                        <tr>
+                            <td>{{ .Item }}</td>
+                            <td>${{ printf "%.2f" .Amount }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Destinations -->
+            <div class="section">
+                <h3>Destination Sales</h3>
+                <table>
+                    <thead>
+                        <tr><th>Item</th><th>Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {{ range (index $categories "Destination") }}
+                        <tr>
+                            <td>{{ .Item }}</td>
+                            <td>${{ printf "%.2f" .Amount }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {{ else }}
+    <p>No historical sales data found for this location.</p>
+    {{ end }}
+
+</body>
+</html>

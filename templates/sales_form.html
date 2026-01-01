@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Sales - {{ .Location.Name }}</title>
+    <style>
+        .container { display: flex; flex-wrap: wrap; gap: 40px; }
+        .section { flex: 1; min-width: 300px; }
+        .form-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        input[type="number"] { width: 100px; text-align: right; }
+    </style>
+</head>
+<body>
+    <h1>Enter Daily Sales</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <hr>
+
+    <form action="/admin/locations/{{ .Location.ID }}/sales" method="POST">
+        <div style="margin-bottom: 20px;">
+            <label for="date"><strong>Date:</strong></label>
+            <input type="date" id="date" name="date" required value="{{ .Today }}">
+        </div>
+
+        <div class="container">
+            <!-- Day Parts -->
+            <div class="section">
+                <h3>Day Part Sales</h3>
+                {{ range .DayParts }}
+                <div class="form-row">
+                    <label>{{ . }}</label>
+                    <input type="number" step="0.01" min="0" name="daypart|{{ . }}" placeholder="0.00">
+                </div>
+                {{ end }}
+            </div>
+
+            <!-- Destinations -->
+            <div class="section">
+                <h3>Destination Sales</h3>
+                {{ range .Destinations }}
+                <div class="form-row">
+                    <label>{{ . }}</label>
+                    <input type="number" step="0.01" min="0" name="destination|{{ . }}" placeholder="0.00">
+                </div>
+                {{ end }}
+            </div>
+        </div>
+
+        <br>
+        <input type="submit" value="Save Sales Data" style="padding: 10px 20px; font-size: 1.1em; background: #28a745; color: white; border: none; cursor: pointer;">
+    </form>
+</body>
+</html>
