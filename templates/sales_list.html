@@ -48,6 +48,7 @@
                         <tr>
                             <th>Item</th>
                             <th>Total</th>
+                            <th>%</th>
                             <th>Average</th>
                         </tr>
                     </thead>
@@ -56,6 +57,7 @@
                         <tr>
                             <td>{{ $k }}</td>
                             <td>${{ printf "%.2f" $v }}</td>
+                            <td>{{ printf "%.1f" (index $.RangeSummary.DayPartPercents $k) }}%</td>
                             <td>${{ printf "%.2f" (index $.RangeSummary.DayPartAverages $k) }}</td>
                         </tr>
                         {{ end }}
@@ -69,6 +71,7 @@
                         <tr>
                             <th>Item</th>
                             <th>Total</th>
+                            <th>%</th>
                             <th>Average</th>
                         </tr>
                     </thead>
@@ -77,6 +80,7 @@
                         <tr>
                             <td>{{ $k }}</td>
                             <td>${{ printf "%.2f" $v }}</td>
+                            <td>{{ printf "%.1f" (index $.RangeSummary.DestinationPercents $k) }}%</td>
                             <td>${{ printf "%.2f" (index $.RangeSummary.DestinationAverages $k) }}</td>
                         </tr>
                         {{ end }}

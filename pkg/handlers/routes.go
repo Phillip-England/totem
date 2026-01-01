@@ -90,10 +90,16 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Location not found", http.StatusNotFound)
 			return
 		}
+		salaries, err := data.GetSalariesByLocation(id)
+		if err != nil {
+			salaries = []data.Salary{}
+		}
 		templateData := struct {
 			Location data.CfaLocation
+			Salaries []data.Salary
 		}{
 			Location: loc,
+			Salaries: salaries,
 		}
 		err = vii.ExecuteTemplate(w, r, "location_details.html", templateData)
 		if err != nil {
@@ -129,6 +135,46 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	})
+
+	// Create Salary
+	app.At("POST /admin/locations/{id}/salaries", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		name := r.FormValue("name")
+		amountStr := r.FormValue("annual_amount")
+		amount, err := strconv.ParseFloat(amountStr, 64)
+		if err != nil || name == "" {
+			http.Error(w, "Invalid input", http.StatusBadRequest)
+			return
+		}
+		err = data.CreateSalary(id, name, amount)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
+	})
+
+	// Delete Salary
+	app.At("POST /admin/locations/{id}/salaries/{salaryId}/delete", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		salaryIdStr := r.PathValue("salaryId")
+		salaryId, err := strconv.Atoi(salaryIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Salary ID", http.StatusBadRequest)
+			return
+		}
+		err = data.DeleteSalary(salaryId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
 	})
 
 	// Edit Location Form
@@ -447,6 +493,9 @@ func RegisterRoutes(app *vii.App) {
 			if _, exists := rangeSummary.DayPartAverages[item]; !exists {
 				rangeSummary.DayPartAverages[item] = 0
 			}
+			if _, exists := rangeSummary.DayPartPercents[item]; !exists {
+				rangeSummary.DayPartPercents[item] = 0
+			}
 		}
 		for _, item := range data.Destinations {
 			if _, exists := rangeSummary.DestinationTotals[item]; !exists {
@@ -454,6 +503,9 @@ func RegisterRoutes(app *vii.App) {
 			}
 			if _, exists := rangeSummary.DestinationAverages[item]; !exists {
 				rangeSummary.DestinationAverages[item] = 0
+			}
+			if _, exists := rangeSummary.DestinationPercents[item]; !exists {
+				rangeSummary.DestinationPercents[item] = 0
 			}
 		}
 
