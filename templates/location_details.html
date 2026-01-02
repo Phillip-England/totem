@@ -9,8 +9,18 @@
         .page { max-width: 900px; margin: 0 auto; padding: 24px; }
         .meta { margin: 14px 0 24px; }
         .meta p { margin: 6px 0; }
-        .section { margin: 18px 0; }
-        .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .section { margin: 22px 0; }
+        .note { color: #555; }
+        .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+        .snapshot { margin-top: 8px; }
+        .snapshot-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 16px 0 20px; }
+        .metric { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 12px; }
+        .metric-label { color: #666; font-size: 0.9em; margin-bottom: 6px; }
+        .metric-value { font-size: 1.05em; }
+        .table-wrap { margin-top: 16px; }
+        .table-wrap h3 { margin-bottom: 10px; }
+        .snapshot table { margin-top: 12px; }
+        .snapshot table th, .snapshot table td { padding: 12px; }
         .btn { display: inline-block; padding: 10px 14px; border-radius: 6px; text-decoration: none; color: #fff; }
         .btn-muted { color: #212529; }
         .btn-blue { background: #007bff; }
@@ -61,6 +71,57 @@
 
         <div class="section">
             <a href="/admin/locations/{{ .Location.ID }}/edit">Edit this Location</a>
+        </div>
+
+        <div class="section snapshot">
+            <h2>Current Month Snapshot</h2>
+            <p class="note">Range: {{ .MonthStart }} to {{ .MonthEnd }}</p>
+            <div class="snapshot-metrics">
+                <div class="metric">
+                    <div class="metric-label">Total Sales</div>
+                    <div class="metric-value">${{ printf "%.2f" .MonthSales }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Avg Daily Sales</div>
+                    <div class="metric-value">${{ printf "%.2f" .AvgDailySales }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Avg Daily Hours</div>
+                    <div class="metric-value">{{ printf "%.2f" .AvgDailyHours }}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Productivity</div>
+                    <div class="metric-value">${{ printf "%.2f" .Productivity }} / hr</div>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <h3>Week by Week</h3>
+                {{ if .WeekSummaries }}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Week Start</th>
+                            <th style="text-align: right;">Sales</th>
+                            <th style="text-align: right;">Hours</th>
+                            <th style="text-align: right;">Productivity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .WeekSummaries }}
+                        <tr>
+                            <td>{{ .Label }}</td>
+                            <td style="text-align: right;">${{ printf "%.2f" .TotalSales }}</td>
+                            <td style="text-align: right;">{{ printf "%.2f" .TotalHours }}</td>
+                            <td style="text-align: right;">${{ printf "%.2f" .Productivity }} / hr</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+                {{ else }}
+                <p class="note"><em>No sales or labor data for this month yet.</em></p>
+                {{ end }}
+            </div>
         </div>
     </div>
 </body>

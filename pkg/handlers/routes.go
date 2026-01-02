@@ -6,7 +6,6 @@ import (
 	"html"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -591,15 +590,15 @@ func parseTimePunchMoney(value string) (float64, bool) {
 	return amount, true
 }
 
-func summarizeTimePunchReport(text string, employees []data.Employee, salaryDaily float64) (timePunchSummary, error) {
+func summarizeTimePunchReport(text string, employees []data.Employee) (timePunchSummary, error) {
 	employeeTotals, reportTotals, startDate, endDate, err := parseTimePunchReport(text)
 	if err != nil {
 		return timePunchSummary{}, err
 	}
-	return summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, salaryDaily, nil)
+	return summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, nil)
 }
 
-func summarizeTimePunchReportFromParsed(employeeTotals map[string]timePunchEmployeeTotals, reportTotals timePunchReportTotals, startDate, endDate time.Time, employees []data.Employee, salaryDaily float64, payrollEvents []data.PayrollEvent) (timePunchSummary, error) {
+func summarizeTimePunchReportFromParsed(employeeTotals map[string]timePunchEmployeeTotals, reportTotals timePunchReportTotals, startDate, endDate time.Time, employees []data.Employee, payrollEvents []data.PayrollEvent) (timePunchSummary, error) {
 
 	dayCount := 0
 	if !startDate.IsZero() && !endDate.IsZero() && !endDate.Before(startDate) {
@@ -857,10 +856,22 @@ func RegisterRoutes(app *vii.App) {
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
-		adminUser := os.Getenv("ADMIN_USERNAME")
-		adminPass := os.Getenv("ADMIN_PASSWORD")
-
-		if username == adminUser && password == adminPass {
+		user, err := data.AuthenticateUser(username, password)
+		if err == nil {
+			payload := user.PasswordHash
+			if isAdminUser(user) {
+				payload = adminSessionPayload()
+				if payload == "" {
+					payload = user.PasswordHash
+				}
+			}
+			expiresAt := time.Now().Add(24 * time.Hour)
+			sessionKey, err := data.CreateSession(user.ID, payload, expiresAt)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			setSessionCookie(w, sessionKey, expiresAt)
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 			return
 		}
@@ -875,10 +886,19 @@ func RegisterRoutes(app *vii.App) {
 			ShowForm: true,
 		}
 
-		err := vii.ExecuteTemplate(w, r, "index.html", data)
+		err = vii.ExecuteTemplate(w, r, "index.html", data)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+
+	app.At("GET /logout", func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(sessionCookieName)
+		if err == nil && cookie != nil && cookie.Value != "" {
+			_ = data.DeleteSessionByKey(cookie.Value)
+		}
+		clearSessionCookie(w)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	})
 
 	// Admin Dashboard - List Locations
@@ -901,6 +921,68 @@ func RegisterRoutes(app *vii.App) {
 		}
 	})
 
+	app.At("GET /admin/users", func(w http.ResponseWriter, r *http.Request) {
+		user, ok := currentUser(r)
+		if !ok || !isAdminUser(user) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		users, err := data.GetUsers()
+		if err != nil {
+			users = []data.User{}
+		}
+		templateData := struct {
+			User    data.User
+			Users   []data.User
+			Message string
+		}{
+			User:  user,
+			Users: users,
+		}
+		if err := vii.ExecuteTemplate(w, r, "users.html", templateData); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	app.At("POST /admin/users/update", func(w http.ResponseWriter, r *http.Request) {
+		user, ok := currentUser(r)
+		if !ok || !isAdminUser(user) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+		if password == "" {
+			http.Error(w, "Password is required", http.StatusBadRequest)
+			return
+		}
+		if err := data.UpdateUserCredentials(user.ID, username, password); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = data.DeleteSessionsByUserID(user.ID)
+		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	})
+
+	app.At("POST /admin/users/create", func(w http.ResponseWriter, r *http.Request) {
+		user, ok := currentUser(r)
+		if !ok || !isAdminUser(user) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+		role := r.FormValue("role")
+		if role == "" {
+			role = "admin"
+		}
+		if _, err := data.CreateUser(username, password, role); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	})
+
 	// View Location Details
 	app.At("GET /admin/locations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
@@ -914,10 +996,86 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Location not found", http.StatusNotFound)
 			return
 		}
+		now := time.Now()
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		monthEnd := now
+		perfRecords, err := data.GetPerformanceReport(id, monthStart.Format("2006-01-02"), monthEnd.Format("2006-01-02"))
+		if err != nil {
+			perfRecords = []data.DailyPerformanceRecord{}
+		}
+		perfSummary := data.CalculateSummary(perfRecords)
+		dayCount := now.Day()
+		avgSales := 0.0
+		avgHours := 0.0
+		if dayCount > 0 {
+			avgSales = perfSummary.Sales / float64(dayCount)
+			avgHours = perfSummary.Hours / float64(dayCount)
+		}
+		productivity := 0.0
+		if perfSummary.Hours > 0 {
+			productivity = perfSummary.Sales / perfSummary.Hours
+		}
+
+		type weekSummary struct {
+			Label        string
+			TotalSales   float64
+			TotalHours   float64
+			Productivity float64
+		}
+		weekTotals := map[time.Time]*weekSummary{}
+		for _, rec := range perfRecords {
+			dateVal, err := time.Parse("2006-01-02", rec.Date)
+			if err != nil {
+				continue
+			}
+			offset := (int(dateVal.Weekday()) + 6) % 7
+			weekStart := time.Date(dateVal.Year(), dateVal.Month(), dateVal.Day()-offset, 0, 0, 0, 0, dateVal.Location())
+			if weekStart.Before(monthStart) {
+				weekStart = monthStart
+			}
+			entry, ok := weekTotals[weekStart]
+			if !ok {
+				weekEnd := weekStart.AddDate(0, 0, 6)
+				if weekEnd.After(monthEnd) {
+					weekEnd = monthEnd
+				}
+				entry = &weekSummary{
+					Label: weekStart.Format("Jan 2") + "–" + weekEnd.Format("Jan 2"),
+				}
+				weekTotals[weekStart] = entry
+			}
+			entry.TotalSales += rec.TotalSales
+			entry.TotalHours += rec.TotalHours
+		}
+		var weeks []weekSummary
+		for _, entry := range weekTotals {
+			if entry.TotalHours > 0 {
+				entry.Productivity = entry.TotalSales / entry.TotalHours
+			}
+			weeks = append(weeks, *entry)
+		}
+		sort.Slice(weeks, func(i, j int) bool {
+			return weeks[i].Label < weeks[j].Label
+		})
+
 		templateData := struct {
-			Location data.CfaLocation
+			Location      data.CfaLocation
+			MonthStart    string
+			MonthEnd      string
+			MonthSales    float64
+			AvgDailySales float64
+			AvgDailyHours float64
+			Productivity  float64
+			WeekSummaries []weekSummary
 		}{
-			Location: loc,
+			Location:      loc,
+			MonthStart:    monthStart.Format("2006-01-02"),
+			MonthEnd:      monthEnd.Format("2006-01-02"),
+			MonthSales:    perfSummary.Sales,
+			AvgDailySales: avgSales,
+			AvgDailyHours: avgHours,
+			Productivity:  productivity,
+			WeekSummaries: weeks,
 		}
 		err = vii.ExecuteTemplate(w, r, "location_details.html", templateData)
 		if err != nil {
@@ -1364,10 +1522,6 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		salaryDaily, err := data.GetDailySalaryCost(id)
-		if err != nil {
-			salaryDaily = 0
-		}
 		employeeTotals, reportTotals, startDate, endDate, err := parseTimePunchReport(text)
 		if err != nil {
 			templateData := struct {
@@ -1392,7 +1546,7 @@ func RegisterRoutes(app *vii.App) {
 			}
 		}
 
-		summary, err := summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, salaryDaily, payrollEvents)
+		summary, err := summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, payrollEvents)
 		templateData := struct {
 			Location data.CfaLocation
 			Summary  *timePunchSummary

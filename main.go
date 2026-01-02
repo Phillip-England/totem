@@ -35,6 +35,7 @@ func main() {
 
 	app := vii.NewApp()
 	app.Use(vii.MwLogger)
+	app.Use(handlers.AuthMiddleware)
 
 	// Load templates from the "templates" directory
 	err := app.Templates("templates", template.FuncMap{})
