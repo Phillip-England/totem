@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard</title>
     <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .page { max-width: 900px; margin: 0 auto; padding: 24px; }
         table { border-collapse: collapse; width: 100%; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -12,12 +14,13 @@
     </style>
 </head>
 <body>
-    <h1>Admin Dashboard</h1>
-    <p>Welcome, Admin!</p>
-    <nav style="margin-bottom: 20px;">
-        <a href="/admin/users">User Settings</a> |
-        <a href="/logout">Logout</a>
-    </nav>
+    <div class="page">
+        <h1>Admin Dashboard</h1>
+        <p>Welcome, Admin!</p>
+        <nav style="margin-bottom: 20px;">
+            <a href="/admin/users">User Settings</a> |
+            <a href="/logout">Logout</a>
+        </nav>
 
     <div class="form-container">
         <h2>Add New Location</h2>
@@ -60,5 +63,6 @@
             {{ end }}
         </tbody>
     </table>
+    </div>
 </body>
 </html>

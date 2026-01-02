@@ -4,20 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .Title }}</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .page { max-width: 900px; margin: 0 auto; padding: 24px; }
+    </style>
 </head>
 <body>
-    <h1>{{ .Message }}</h1>
-    
-    {{ if .ShowForm }}
-    <form action="/" method="POST">
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required><br><br>
+    <div class="page">
+        <h1>{{ .Message }}</h1>
         
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required><br><br>
-        
-        <input type="submit" value="Login">
-    </form>
-    {{ end }}
+        {{ if .ShowForm }}
+        <form action="/" method="POST">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required><br><br>
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required><br><br>
+            
+            <input type="submit" value="Login">
+        </form>
+        {{ end }}
+    </div>
 </body>
 </html>

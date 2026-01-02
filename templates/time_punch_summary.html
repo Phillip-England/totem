@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Time Punch Summary - {{ .Location.Name }}</title>
     <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .page { max-width: 900px; margin: 0 auto; padding: 24px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -12,6 +14,7 @@
     </style>
 </head>
 <body>
+    <div class="page">
     <h1>Time Punch Summary</h1>
     <h2>Location: {{ .Location.Name }}</h2>
     <nav style="font-size: 0.9em; margin-bottom: 10px;">
@@ -112,5 +115,6 @@
             </tbody>
         </table>
     {{ end }}
+    </div>
 </body>
 </html>

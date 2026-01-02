@@ -4,23 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Location</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .page { max-width: 900px; margin: 0 auto; padding: 24px; }
+    </style>
 </head>
 <body>
-    <h1>Edit Location</h1>
-    <nav style="font-size: 0.9em; margin-bottom: 10px;">
-        <a href="/admin">Dashboard</a> /
-        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
-        <span>Edit Location</span>
-    </nav>
+    <div class="page">
+        <h1>Edit Location</h1>
+        <nav style="font-size: 0.9em; margin-bottom: 10px;">
+            <a href="/admin">Dashboard</a> /
+            <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+            <span>Edit Location</span>
+        </nav>
 
-    <form action="/admin/locations/{{ .Location.ID }}/update" method="POST">
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" value="{{ .Location.Name }}" required><br><br>
-        
-        <label for="number">Number:</label>
-        <input type="text" id="number" name="number" value="{{ .Location.Number }}" required><br><br>
-        
-        <input type="submit" value="Update Location">
-    </form>
+        <form action="/admin/locations/{{ .Location.ID }}/update" method="POST">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" value="{{ .Location.Name }}" required><br><br>
+            
+            <label for="number">Number:</label>
+            <input type="text" id="number" name="number" value="{{ .Location.Number }}" required><br><br>
+            
+            <input type="submit" value="Update Location">
+        </form>
+    </div>
 </body>
 </html>
