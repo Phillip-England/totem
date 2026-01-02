@@ -724,6 +724,10 @@ func RegisterRoutes(app *vii.App) {
 		if err != nil {
 			events = []data.PayrollEvent{}
 		}
+		employees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			employees = []data.Employee{}
+		}
 
 		var totalAmount float64
 		for _, e := range events {
@@ -736,6 +740,7 @@ func RegisterRoutes(app *vii.App) {
 			Location    data.CfaLocation
 			Events      []data.PayrollEvent
 			EventTypes  []string
+			Employees   []data.Employee
 			StartDate   string
 			EndDate     string
 			Today       string
@@ -745,6 +750,7 @@ func RegisterRoutes(app *vii.App) {
 			Location:    loc,
 			Events:      events,
 			EventTypes:  data.PayrollEventTypes,
+			Employees:   employees,
 			StartDate:   startDate,
 			EndDate:     endDate,
 			Today:       time.Now().Format("2006-01-02"),
@@ -766,6 +772,12 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 		date := r.FormValue("date")
+		employeeIDStr := r.FormValue("employee_id")
+		employeeID, err := strconv.Atoi(employeeIDStr)
+		if err != nil || employeeID == 0 {
+			http.Error(w, "Employee is required", http.StatusBadRequest)
+			return
+		}
 		eventType := r.FormValue("event_type")
 		description := r.FormValue("description")
 		amountStr := r.FormValue("amount")
@@ -774,7 +786,7 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Invalid input", http.StatusBadRequest)
 			return
 		}
-		err = data.CreatePayrollEvent(id, date, eventType, description, amount)
+		err = data.CreatePayrollEvent(id, employeeID, date, eventType, description, amount)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1233,7 +1245,7 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Invalid ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		err = r.ParseForm()
 		if err != nil {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -1246,187 +1258,189 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 
-		        var records []data.SaleRecord
-		
-		        if rawText := r.FormValue("raw_text"); rawText != "" {
-		            // Parsing Logic for Raw Text
-		            lines := strings.Split(rawText, "\n")
-		            
-		            dpMap := make(map[string]float64)
-		            destMap := make(map[string]float64)
-		            
-		            seenReportTotals := false
-		
-		            parseMoney := func(s string) float64 {
-		                s = strings.ReplaceAll(s, "$", "")
-		                s = strings.ReplaceAll(s, ",", "")
-		                val, _ := strconv.ParseFloat(s, 64)
-		                return val
-		            }
-		
-		            			// Mapping for report names to system names
-		            			destMapping := map[string]string{
-		            				"CARRY OUT":    "Carry Out",
-		            				"DELIVERY":     "Catering Delivery",
-		            				"PICKUP":       "Catering Pickup",
-		            				"DINE IN":      "Dine-In",
-		            				"DRIVE THRU":   "Drive-Thru",
-		            				"M-CARRYOUT":   "Mobile Carryout",
-		            				"M-DINEIN":     "Mobile Dine-In",
-		            				"M-DRIVE-THRU": "Mobile Drive-Thru",
-		            				"ON DEMAND":    "Third-Party Delivery",
-		            			}
-		            
-		            			for _, line := range lines {
-		            				line = strings.TrimSpace(line)
-		            				if line == "" { continue }
-		            
-		            				if strings.HasPrefix(line, "Report Totals:") {
-		            					seenReportTotals = true
-		            					continue
-		            				}
-		            				
-		            				parts := strings.Fields(line)
-		            				if len(parts) < 3 { continue }
-		            
-		            				// Check Day Parts
-		            				if len(parts) >= 5 && parts[1] == "-" {
-		            					dpName := parts[2]
-		            					if contains(data.DayParts, dpName) {
-		            						sales := parseMoney(parts[4])
-		            						dpMap[dpName] += sales
-		            					}
-		            				}
-		            
-		            				// Check Destinations
-		            				if !seenReportTotals {
-		            					// Try to match start of line against keys in destMapping
-		            					// We iterate keys, check prefix.
-		            					// Keys with spaces (CARRY OUT) need checking.
-		            					// Note: "M-..." are single tokens.
-		            					
-		            					matchedKey := ""
-		            					for key := range destMapping {
-		            						if strings.HasPrefix(line, key) {
-		            							// Prefer longer match? (e.g. CARRY OUT vs CARRY)
-		            							if len(key) > len(matchedKey) {
-		            								matchedKey = key
-		            							}
-		            						}
-		            					}
-		            
-		            					if matchedKey != "" {
-		            						systemName := destMapping[matchedKey]
-		            						// Format: KEY count sales ...
-		            						// We need to parse sales which is usually the token AFTER the count.
-		            						// Count is after the key.
-		            						// Let's tokenize the line again based on the key length or just use Fields.
-		            						
-		            						// CARRY OUT 200 1,635.31
-		            						// Parts: CARRY, OUT, 200, 1,635.31 -> Index 3
-		            						// DELIVERY 1 441.50
-		            						// Parts: DELIVERY, 1, 441.50 -> Index 2
-		            						
-		            						keyParts := strings.Fields(matchedKey)
-		            						salesIndex := len(keyParts) + 1 // Key tokens + 1 (Count) -> Next is Sales
-		            						
-		            						if len(parts) > salesIndex {
-		            							sales := parseMoney(parts[salesIndex])
-		            							destMap[systemName] += sales
-		            						}
-		            					}
-		            				}
-		            			}		
-		            // Convert Maps to Records
-		            for dp, amt := range dpMap {
-		                records = append(records, data.SaleRecord{
-		                    LocationID: id,
-		                    Date:       date,
-		                    Category:   "DayPart",
-		                    Item:       dp,
-		                    Amount:     amt,
-		                })
-		            }
-		            for dest, amt := range destMap {
-		                records = append(records, data.SaleRecord{
-		                    LocationID: id,
-		                    Date:       date,
-		                    Category:   "Destination",
-		                    Item:       dest,
-		                    Amount:     amt,
-		                })
-		            }
-		
-		        } else {
-		            // Manual Entry Fallback
-		            for key, values := range r.Form {
-		                // Check for DayPart inputs
-		                if strings.HasPrefix(key, "daypart|") {
-		                    parts := strings.Split(key, "|")
-		                    if len(parts) != 2 {
-		                        continue
-		                    }
-		                    item := parts[1]
-		                    amountStr := values[0]
-		                    if amountStr == "" {
-		                        continue
-		                    }
-		                    amount, err := strconv.ParseFloat(amountStr, 64)
-		                    if err != nil {
-		                        continue
-		                    }
-		                    records = append(records, data.SaleRecord{
-		                        LocationID: id,
-		                        Date:       date,
-		                        Category:   "DayPart",
-		                        Item:       item,
-		                        Amount:     amount,
-		                    })
-		                }
-		
-		                // Check for Destination inputs
-		                if strings.HasPrefix(key, "destination|") {
-		                    parts := strings.Split(key, "|")
-		                    if len(parts) != 2 {
-		                        continue
-		                    }
-		                    item := parts[1]
-		                    amountStr := values[0]
-		                    if amountStr == "" {
-		                        continue
-		                    }
-		                    amount, err := strconv.ParseFloat(amountStr, 64)
-		                    if err != nil {
-		                        continue
-		                    }
-		                    records = append(records, data.SaleRecord{
-		                        LocationID: id,
-		                        Date:       date,
-		                        Category:   "Destination",
-		                        Item:       item,
-		                        Amount:     amount,
-		                    })
-		                }
-		            }
-		        }
-		
-		        if len(records) > 0 {
-		            err = data.SaveSalesBatch(id, date, records)
-		            if err != nil {
-		                http.Error(w, err.Error(), http.StatusInternalServerError)
-		                return
-		            }
-		        }
-		
-		        				http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
-		
-		        			})
-		
-		        		
-		
-		        			// Sales History List (with Range Filter)
-		
-		        			app.At("GET /admin/locations/{id}/sales/history", func(w http.ResponseWriter, r *http.Request) {
+		var records []data.SaleRecord
+
+		if rawText := r.FormValue("raw_text"); rawText != "" {
+			// Parsing Logic for Raw Text
+			lines := strings.Split(rawText, "\n")
+
+			dpMap := make(map[string]float64)
+			destMap := make(map[string]float64)
+
+			seenReportTotals := false
+
+			parseMoney := func(s string) float64 {
+				s = strings.ReplaceAll(s, "$", "")
+				s = strings.ReplaceAll(s, ",", "")
+				val, _ := strconv.ParseFloat(s, 64)
+				return val
+			}
+
+			// Mapping for report names to system names
+			destMapping := map[string]string{
+				"CARRY OUT":    "Carry Out",
+				"DELIVERY":     "Catering Delivery",
+				"PICKUP":       "Catering Pickup",
+				"DINE IN":      "Dine-In",
+				"DRIVE THRU":   "Drive-Thru",
+				"M-CARRYOUT":   "Mobile Carryout",
+				"M-DINEIN":     "Mobile Dine-In",
+				"M-DRIVE-THRU": "Mobile Drive-Thru",
+				"ON DEMAND":    "Third-Party Delivery",
+			}
+
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+
+				if strings.HasPrefix(line, "Report Totals:") {
+					seenReportTotals = true
+					continue
+				}
+
+				parts := strings.Fields(line)
+				if len(parts) < 3 {
+					continue
+				}
+
+				// Check Day Parts
+				if len(parts) >= 5 && parts[1] == "-" {
+					dpName := parts[2]
+					if contains(data.DayParts, dpName) {
+						sales := parseMoney(parts[4])
+						dpMap[dpName] += sales
+					}
+				}
+
+				// Check Destinations
+				if !seenReportTotals {
+					// Try to match start of line against keys in destMapping
+					// We iterate keys, check prefix.
+					// Keys with spaces (CARRY OUT) need checking.
+					// Note: "M-..." are single tokens.
+
+					matchedKey := ""
+					for key := range destMapping {
+						if strings.HasPrefix(line, key) {
+							// Prefer longer match? (e.g. CARRY OUT vs CARRY)
+							if len(key) > len(matchedKey) {
+								matchedKey = key
+							}
+						}
+					}
+
+					if matchedKey != "" {
+						systemName := destMapping[matchedKey]
+						// Format: KEY count sales ...
+						// We need to parse sales which is usually the token AFTER the count.
+						// Count is after the key.
+						// Let's tokenize the line again based on the key length or just use Fields.
+
+						// CARRY OUT 200 1,635.31
+						// Parts: CARRY, OUT, 200, 1,635.31 -> Index 3
+						// DELIVERY 1 441.50
+						// Parts: DELIVERY, 1, 441.50 -> Index 2
+
+						keyParts := strings.Fields(matchedKey)
+						salesIndex := len(keyParts) + 1 // Key tokens + 1 (Count) -> Next is Sales
+
+						if len(parts) > salesIndex {
+							sales := parseMoney(parts[salesIndex])
+							destMap[systemName] += sales
+						}
+					}
+				}
+			}
+			// Convert Maps to Records
+			for dp, amt := range dpMap {
+				records = append(records, data.SaleRecord{
+					LocationID: id,
+					Date:       date,
+					Category:   "DayPart",
+					Item:       dp,
+					Amount:     amt,
+				})
+			}
+			for dest, amt := range destMap {
+				records = append(records, data.SaleRecord{
+					LocationID: id,
+					Date:       date,
+					Category:   "Destination",
+					Item:       dest,
+					Amount:     amt,
+				})
+			}
+
+		} else {
+			// Manual Entry Fallback
+			for key, values := range r.Form {
+				// Check for DayPart inputs
+				if strings.HasPrefix(key, "daypart|") {
+					parts := strings.Split(key, "|")
+					if len(parts) != 2 {
+						continue
+					}
+					item := parts[1]
+					amountStr := values[0]
+					if amountStr == "" {
+						continue
+					}
+					amount, err := strconv.ParseFloat(amountStr, 64)
+					if err != nil {
+						continue
+					}
+					records = append(records, data.SaleRecord{
+						LocationID: id,
+						Date:       date,
+						Category:   "DayPart",
+						Item:       item,
+						Amount:     amount,
+					})
+				}
+
+				// Check for Destination inputs
+				if strings.HasPrefix(key, "destination|") {
+					parts := strings.Split(key, "|")
+					if len(parts) != 2 {
+						continue
+					}
+					item := parts[1]
+					amountStr := values[0]
+					if amountStr == "" {
+						continue
+					}
+					amount, err := strconv.ParseFloat(amountStr, 64)
+					if err != nil {
+						continue
+					}
+					records = append(records, data.SaleRecord{
+						LocationID: id,
+						Date:       date,
+						Category:   "Destination",
+						Item:       item,
+						Amount:     amount,
+					})
+				}
+			}
+		}
+
+		if len(records) > 0 {
+			err = data.SaveSalesBatch(id, date, records)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
+
+	})
+
+	// Sales History List (with Range Filter)
+
+	app.At("GET /admin/locations/{id}/sales/history", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
@@ -1546,23 +1560,31 @@ func RegisterRoutes(app *vii.App) {
 		var dayParts []data.SaleRecord
 		var dpTotal float64
 		// First pass: Calculate totals (already done implicitly, but safer to re-sum if we were skipping 0s, but we aren't)
-		for _, item := range data.DayParts { dpTotal += dpMap[item] }
+		for _, item := range data.DayParts {
+			dpTotal += dpMap[item]
+		}
 
 		for _, item := range data.DayParts {
 			amt := dpMap[item]
 			pct := 0.0
-			if dpTotal > 0 { pct = (amt / dpTotal) * 100 }
+			if dpTotal > 0 {
+				pct = (amt / dpTotal) * 100
+			}
 			dayParts = append(dayParts, data.SaleRecord{Item: item, Amount: amt, Percent: pct})
 		}
 
 		var destinations []data.SaleRecord
 		var destTotal float64
-		for _, item := range data.Destinations { destTotal += destMap[item] }
+		for _, item := range data.Destinations {
+			destTotal += destMap[item]
+		}
 
 		for _, item := range data.Destinations {
 			amt := destMap[item]
 			pct := 0.0
-			if destTotal > 0 { pct = (amt / destTotal) * 100 }
+			if destTotal > 0 {
+				pct = (amt / destTotal) * 100
+			}
 			destinations = append(destinations, data.SaleRecord{Item: item, Amount: amt, Percent: pct})
 		}
 
@@ -1636,7 +1658,7 @@ func RegisterRoutes(app *vii.App) {
 
 		date := r.FormValue("date")
 		rawText := r.FormValue("raw_text")
-		
+
 		var regular, overtime, regularWages, overtimeWages float64
 
 		if rawText != "" {
@@ -1661,7 +1683,9 @@ func RegisterRoutes(app *vii.App) {
 					if len(parts) >= 9 {
 						parseHours := func(s string) float64 {
 							p := strings.Split(s, ":")
-							if len(p) != 2 { return 0 }
+							if len(p) != 2 {
+								return 0
+							}
 							h, _ := strconv.Atoi(p[0])
 							m, _ := strconv.Atoi(p[1])
 							return float64(h) + float64(m)/60.0
@@ -1705,92 +1729,92 @@ func RegisterRoutes(app *vii.App) {
 		http.Redirect(w, r, "/admin/locations/"+idStr, http.StatusSeeOther)
 	})
 
-		// Labor History (Consolidated Performance View)
-		app.At("GET /admin/locations/{id}/labor/history", func(w http.ResponseWriter, r *http.Request) {
-			idStr := r.PathValue("id")
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
-				http.Error(w, "Invalid ID", http.StatusBadRequest)
-				return
-			}
-			loc, err := data.GetLocationByID(id)
-			if err != nil {
-				http.Error(w, "Location not found", http.StatusNotFound)
-				return
-			}
-	
-			startDate := r.URL.Query().Get("start")
-			endDate := r.URL.Query().Get("end")
-	
-			// Default to last 90 days if no filter provided
-			if startDate == "" && endDate == "" {
-				now := time.Now()
-				endDate = now.Format("2006-01-02")
-				startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
-			}
-	
-					records, err := data.GetPerformanceReport(id, startDate, endDate)
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-			
-									// Calculate Range Summary
-									summary := data.CalculateSummary(records)
-							
-									ranges := getCommonRanges()
-							
-									templateData := struct {
-										Location  data.CfaLocation
-										Records   []data.DailyPerformanceRecord
-										StartDate string
-										EndDate   string
-										Ranges    interface{}
-										Summary   data.PerformanceSummary
-									}{
-										Location:  loc,
-										Records:   records,
-										StartDate: startDate,
-										EndDate:   endDate,
-										Ranges:    ranges,
-										Summary:   summary,
-									}
-							
-									err = vii.ExecuteTemplate(w, r, "labor_history.html", templateData)
-									if err != nil {
-										http.Error(w, err.Error(), http.StatusInternalServerError)
-									}
-								})
-							
-								// API: Performance Summary
-								app.At("GET /api/locations/{id}/performance", func(w http.ResponseWriter, r *http.Request) {
-									idStr := r.PathValue("id")
-									id, err := strconv.Atoi(idStr)
-									if err != nil {
-										app.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
-										return
-									}
-							
-									startDate := r.URL.Query().Get("start")
-									endDate := r.URL.Query().Get("end")
-							
-									// Default to today if no range provided? Or last 90?
-									// For API, explicit or empty (all) is usually better, but let's match the UI behavior for consistency if not specified.
-									// Actually, standard API: if not specified, maybe just today?
-									// Let's use the same default: 90 days.
-									if startDate == "" && endDate == "" {
-										now := time.Now()
-										endDate = now.Format("2006-01-02")
-										startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
-									}
-							
-									records, err := data.GetPerformanceReport(id, startDate, endDate)
-									if err != nil {
-										app.JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-										return
-									}
-							
-									summary := data.CalculateSummary(records)
+	// Labor History (Consolidated Performance View)
+	app.At("GET /admin/locations/{id}/labor/history", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+
+		startDate := r.URL.Query().Get("start")
+		endDate := r.URL.Query().Get("end")
+
+		// Default to last 90 days if no filter provided
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
+
+		records, err := data.GetPerformanceReport(id, startDate, endDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Calculate Range Summary
+		summary := data.CalculateSummary(records)
+
+		ranges := getCommonRanges()
+
+		templateData := struct {
+			Location  data.CfaLocation
+			Records   []data.DailyPerformanceRecord
+			StartDate string
+			EndDate   string
+			Ranges    interface{}
+			Summary   data.PerformanceSummary
+		}{
+			Location:  loc,
+			Records:   records,
+			StartDate: startDate,
+			EndDate:   endDate,
+			Ranges:    ranges,
+			Summary:   summary,
+		}
+
+		err = vii.ExecuteTemplate(w, r, "labor_history.html", templateData)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	// API: Performance Summary
+	app.At("GET /api/locations/{id}/performance", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			app.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+			return
+		}
+
+		startDate := r.URL.Query().Get("start")
+		endDate := r.URL.Query().Get("end")
+
+		// Default to today if no range provided? Or last 90?
+		// For API, explicit or empty (all) is usually better, but let's match the UI behavior for consistency if not specified.
+		// Actually, standard API: if not specified, maybe just today?
+		// Let's use the same default: 90 days.
+		if startDate == "" && endDate == "" {
+			now := time.Now()
+			endDate = now.Format("2006-01-02")
+			startDate = now.AddDate(0, 0, -90).Format("2006-01-02")
+		}
+
+		records, err := data.GetPerformanceReport(id, startDate, endDate)
+		if err != nil {
+			app.JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		summary := data.CalculateSummary(records)
 		app.JSON(w, http.StatusOK, map[string]interface{}{
 			"summary":   summary,
 			"records":   records,
@@ -1801,32 +1825,32 @@ func RegisterRoutes(app *vii.App) {
 }
 
 func getCommonRanges() struct{ MonthStart, NinetyStart, YTDStart, Today string } {
-			now := time.Now()
-			today := now.Format("2006-01-02")
-		
-			// Current Month
-			monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		
-			// 90 Days
-			ninetyStart := now.AddDate(0, 0, -90).Format("2006-01-02")
-		
-			// YTD
-			ytdStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		
-				return struct{ MonthStart, NinetyStart, YTDStart, Today string }{
-					MonthStart:  monthStart,
-					NinetyStart: ninetyStart,
-					YTDStart:    ytdStart,
-					Today:       today,
-				}
-			}
-			
-			// Helper to check slice containment
-			func contains(slice []string, val string) bool {
-				for _, item := range slice {
-					if item == val {
-						return true
-					}
-				}
-				return false
-			}
+	now := time.Now()
+	today := now.Format("2006-01-02")
+
+	// Current Month
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+
+	// 90 Days
+	ninetyStart := now.AddDate(0, 0, -90).Format("2006-01-02")
+
+	// YTD
+	ytdStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+
+	return struct{ MonthStart, NinetyStart, YTDStart, Today string }{
+		MonthStart:  monthStart,
+		NinetyStart: ninetyStart,
+		YTDStart:    ytdStart,
+		Today:       today,
+	}
+}
+
+// Helper to check slice containment
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
+}

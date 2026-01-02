@@ -37,6 +37,16 @@
             </label>
         </div>
         <div style="margin-bottom: 10px;">
+            <label>Employee:<br>
+                <select name="employee_id" required style="width: 100%; padding: 8px; box-sizing: border-box;">
+                    <option value="">Select employee</option>
+                    {{ range .Employees }}
+                    <option value="{{ .ID }}">{{ .FirstName }} {{ .LastName }}</option>
+                    {{ end }}
+                </select>
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
             <label>Description:<br>
                 <input type="text" name="description" required style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="e.g., John Smith - Holiday Bonus">
             </label>
@@ -71,6 +81,7 @@
             <tr>
                 <th>Date</th>
                 <th>Type</th>
+                <th>Employee</th>
                 <th>Description</th>
                 <th style="text-align: right;">Amount</th>
                 <th style="text-align: center;">Actions</th>
@@ -81,6 +92,7 @@
             <tr>
                 <td>{{ .Date }}</td>
                 <td><strong>{{ .EventType }}</strong></td>
+                <td>{{ if .EmployeeName }}{{ .EmployeeName }}{{ else }}<em>Unknown</em>{{ end }}</td>
                 <td>{{ .Description }}</td>
                 <td style="text-align: right;">${{ printf "%.2f" .Amount }}</td>
                 <td style="text-align: center;">
@@ -91,7 +103,7 @@
             </tr>
             {{ end }}
             <tr class="total-row">
-                <td colspan="3">Total ({{ len .Events }} events)</td>
+                <td colspan="4">Total ({{ len .Events }} events)</td>
                 <td style="text-align: right;">${{ printf "%.2f" .TotalAmount }}</td>
                 <td></td>
             </tr>
