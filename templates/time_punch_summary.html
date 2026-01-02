@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Punch Summary - {{ .Location.Name }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .note { color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Time Punch Summary</h1>
+    <h2>Location: {{ .Location.Name }}</h2>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <span>Time Punch Summary</span>
+    </nav>
+    <hr>
+
+    <h3>Paste Time Punch Report</h3>
+    <form action="/admin/locations/{{ .Location.ID }}/timepunch" method="POST" style="max-width: 800px; margin-bottom: 30px;">
+        <div style="margin-bottom: 10px;">
+            <textarea name="time_punch_text" rows="12" required style="width: 100%; padding: 8px; box-sizing: border-box;" placeholder="Paste the Employee Time Detail report text here."></textarea>
+        </div>
+        <button type="submit" style="background: #0d6efd; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Summarize</button>
+    </form>
+
+    {{ if .Error }}
+        <p style="color: #b02a37;"><strong>Error:</strong> {{ .Error }}</p>
+    {{ end }}
+
+    {{ if .Summary }}
+        <h3>Totals</h3>
+        <table style="max-width: 600px;">
+            <thead>
+                <tr>
+                    <th>Total Wages</th>
+                    <th>Total Hours</th>
+                    <th>Overtime Hours</th>
+                    <th>Total Sales</th>
+                    <th>Productivity</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>${{ printf "%.2f" .Summary.TotalWages }}</td>
+                    <td>{{ printf "%.2f" .Summary.TotalHours }}</td>
+                    <td>{{ printf "%.2f" .Summary.OvertimeHours }}</td>
+                    <td>${{ printf "%.2f" .Summary.TotalSales }}</td>
+                    <td>${{ printf "%.2f" .Summary.Productivity }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Department Summary</h3>
+        <p class="note">
+            {{ if .Summary.StartDate }}Range: {{ .Summary.StartDate }} to {{ .Summary.EndDate }} ({{ .Summary.DayCount }} days){{ end }}
+            {{ if .Summary.UnmatchedEmployees }} — {{ .Summary.UnmatchedEmployees }} employee(s) not found in the roster were placed in TERMINATED.{{ end }}
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Department</th>
+                    <th style="text-align: right;">Hours</th>
+                    <th style="text-align: right;">Wages</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Summary.DepartmentTotals }}
+                <tr>
+                    <td>{{ .Department }}</td>
+                    <td style="text-align: right;">{{ printf "%.2f" .Hours }}</td>
+                    <td style="text-align: right;">${{ printf "%.2f" .Wages }}</td>
+                </tr>
+                {{ end }}
+                <tr>
+                    <td><strong>TOTAL</strong></td>
+                    <td style="text-align: right;"><strong>{{ printf "%.2f" .Summary.DepartmentHours }}</strong></td>
+                    <td style="text-align: right;"><strong>${{ printf "%.2f" .Summary.DepartmentWages }}</strong></td>
+                </tr>
+                <tr>
+                    <td><strong>TOTAL (including payroll events)</strong></td>
+                    <td style="text-align: right;"><strong>{{ printf "%.2f" .Summary.DepartmentHoursAll }}</strong></td>
+                    <td style="text-align: right;"><strong>${{ printf "%.2f" .Summary.WagesWithPayroll }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Employee Breakdown</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th style="text-align: right;">Hours</th>
+                    <th style="text-align: right;">Wages</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Summary.EmployeeTotals }}
+                <tr>
+                    <td>{{ .Name }}</td>
+                    <td>{{ .Department }}</td>
+                    <td style="text-align: right;">{{ printf "%.2f" .Hours }}</td>
+                    <td style="text-align: right;">${{ printf "%.2f" .Wages }}</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    {{ end }}
+</body>
+</html>

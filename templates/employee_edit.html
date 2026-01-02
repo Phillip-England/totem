@@ -33,6 +33,11 @@
             </label>
         </div>
         <div style="margin-bottom: 10px;">
+            <label>Annual Salary (0 = hourly):<br>
+                <input type="number" name="annual_salary" min="0" step="0.01" value="{{ printf "%.2f" .Employee.AnnualSalary }}" style="width: 100%; padding: 8px; box-sizing: border-box;">
+            </label>
+        </div>
+        <div style="margin-bottom: 10px;">
             <label>Department:<br>
                 <select name="department" style="width: 100%; padding: 8px; box-sizing: border-box;">
                     {{ range $.Departments }}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -420,6 +421,343 @@ func extractHotSchedulesJobs(cell *goquery.Selection) []string {
 	return jobs
 }
 
+type timePunchEmployeeTotals struct {
+	Name       string
+	Department string
+	Hours      float64
+	Wages      float64
+}
+
+type timePunchDepartmentTotals struct {
+	Department string
+	Hours      float64
+	Wages      float64
+}
+
+type timePunchSummary struct {
+	StartDate          string
+	EndDate            string
+	DayCount           int
+	DepartmentTotals   []timePunchDepartmentTotals
+	EmployeeTotals     []timePunchEmployeeTotals
+	TotalHours         float64
+	OvertimeHours      float64
+	TotalWages         float64
+	DepartmentHours    float64
+	DepartmentWages    float64
+	DepartmentHoursAll float64
+	WagesWithSalary    float64
+	WagesWithPayroll   float64
+	PayrollEventsTotal float64
+	TotalSales         float64
+	Productivity       float64
+	SalaryAmount       float64
+	SalaryHours        float64
+	UnmatchedEmployees int
+}
+
+type timePunchReportTotals struct {
+	TotalHours    float64
+	RegularHours  float64
+	OvertimeHours float64
+	TotalWages    float64
+	RegularWages  float64
+	OvertimeWages float64
+}
+
+func parseTimePunchReport(text string) (map[string]timePunchEmployeeTotals, timePunchReportTotals, time.Time, time.Time, error) {
+	lines := strings.Split(text, "\n")
+	var currentName string
+	employeeTotals := make(map[string]timePunchEmployeeTotals)
+	var startDate time.Time
+	var endDate time.Time
+	var totals timePunchReportTotals
+
+	dateRangeRe := regexp.MustCompile(`(?i)from\s+\w+,\s+([A-Za-z]{3}\s+\d{1,2},\s+\d{4})\s+through\s+\w+,\s+([A-Za-z]{3}\s+\d{1,2},\s+\d{4})`)
+	timeRe := regexp.MustCompile(`\d{1,3}:\d{2}`)
+	moneyRe := regexp.MustCompile(`\$\d[\d,]*\.\d{2}`)
+
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "All Employees Grand Total") {
+			timeMatches := timeRe.FindAllString(line, -1)
+			moneyMatches := moneyRe.FindAllString(line, -1)
+			if len(timeMatches) >= 3 {
+				if hours, ok := parseTimePunchHours(timeMatches[0]); ok {
+					totals.TotalHours = hours
+				}
+				if hours, ok := parseTimePunchHours(timeMatches[1]); ok {
+					totals.RegularHours = hours
+				}
+				if hours, ok := parseTimePunchHours(timeMatches[2]); ok {
+					totals.OvertimeHours = hours
+				}
+			}
+			if len(moneyMatches) >= 3 {
+				if amount, ok := parseTimePunchMoney(moneyMatches[0]); ok {
+					totals.RegularWages = amount
+				}
+				if amount, ok := parseTimePunchMoney(moneyMatches[1]); ok {
+					totals.OvertimeWages = amount
+				}
+				if amount, ok := parseTimePunchMoney(moneyMatches[2]); ok {
+					totals.TotalWages = amount
+				}
+			}
+			continue
+		}
+		if matches := dateRangeRe.FindStringSubmatch(line); len(matches) == 3 {
+			if parsed, err := time.Parse("Jan 2, 2006", matches[1]); err == nil {
+				startDate = parsed
+			}
+			if parsed, err := time.Parse("Jan 2, 2006", matches[2]); err == nil {
+				endDate = parsed
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "Employee Totals") {
+			if currentName == "" {
+				continue
+			}
+			timeMatches := timeRe.FindAllString(line, -1)
+			moneyMatches := moneyRe.FindAllString(line, -1)
+			if len(timeMatches) == 0 || len(moneyMatches) == 0 {
+				continue
+			}
+			hours, ok := parseTimePunchHours(timeMatches[0])
+			if !ok {
+				continue
+			}
+			wages, ok := parseTimePunchMoney(moneyMatches[len(moneyMatches)-1])
+			if !ok {
+				continue
+			}
+			employeeTotals[currentName] = timePunchEmployeeTotals{
+				Name:  currentName,
+				Hours: hours,
+				Wages: wages,
+			}
+			continue
+		}
+		if isTimePunchNameLine(line) {
+			currentName = line
+		}
+	}
+
+	if len(employeeTotals) == 0 {
+		return nil, timePunchReportTotals{}, time.Time{}, time.Time{}, fmt.Errorf("no employee totals found in report")
+	}
+	return employeeTotals, totals, startDate, endDate, nil
+}
+
+func isTimePunchNameLine(line string) bool {
+	if strings.Contains(line, "Employee Totals") || strings.Contains(line, "All Employees Grand Total") {
+		return false
+	}
+	if strings.HasPrefix(line, "Mon,") || strings.HasPrefix(line, "Tue,") || strings.HasPrefix(line, "Wed,") ||
+		strings.HasPrefix(line, "Thu,") || strings.HasPrefix(line, "Fri,") || strings.HasPrefix(line, "Sat,") ||
+		strings.HasPrefix(line, "Sun,") || strings.HasPrefix(line, "* ") {
+		return false
+	}
+	return strings.Contains(line, ",")
+}
+
+func parseTimePunchHours(value string) (float64, bool) {
+	parts := strings.Split(value, ":")
+	if len(parts) != 2 {
+		return 0, false
+	}
+	hours, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, false
+	}
+	minutes, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, false
+	}
+	return float64(hours) + float64(minutes)/60.0, true
+}
+
+func parseTimePunchMoney(value string) (float64, bool) {
+	clean := strings.ReplaceAll(value, "$", "")
+	clean = strings.ReplaceAll(clean, ",", "")
+	amount, err := strconv.ParseFloat(clean, 64)
+	if err != nil {
+		return 0, false
+	}
+	return amount, true
+}
+
+func summarizeTimePunchReport(text string, employees []data.Employee, salaryDaily float64) (timePunchSummary, error) {
+	employeeTotals, reportTotals, startDate, endDate, err := parseTimePunchReport(text)
+	if err != nil {
+		return timePunchSummary{}, err
+	}
+	return summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, salaryDaily, nil)
+}
+
+func summarizeTimePunchReportFromParsed(employeeTotals map[string]timePunchEmployeeTotals, reportTotals timePunchReportTotals, startDate, endDate time.Time, employees []data.Employee, salaryDaily float64, payrollEvents []data.PayrollEvent) (timePunchSummary, error) {
+
+	dayCount := 0
+	if !startDate.IsZero() && !endDate.IsZero() && !endDate.Before(startDate) {
+		dayCount = int(endDate.Sub(startDate).Hours()/24) + 1
+	}
+
+	employeeByKey := make(map[string]data.Employee, len(employees))
+	salaryEmployeesByKey := make(map[string]data.Employee)
+	for _, emp := range employees {
+		key := normalizeNameKey(emp.FirstName, emp.LastName)
+		if key != "" {
+			employeeByKey[key] = emp
+			if emp.AnnualSalary > 0 {
+				salaryEmployeesByKey[key] = emp
+			}
+		}
+	}
+
+	departmentTotals := map[string]timePunchDepartmentTotals{}
+	var employeeSummary []timePunchEmployeeTotals
+	var salaryHours float64
+	var salaryAmount float64
+	var unmatched int
+
+	for _, totals := range employeeTotals {
+		first, last, _, ok := splitTimePunchName(totals.Name)
+		department := "TERMINATED"
+		salaryEmployee := false
+		annualSalary := 0.0
+		if ok {
+			key := normalizeNameKey(first, last)
+			if emp, found := employeeByKey[key]; found {
+				department = emp.Department
+				salaryEmployee = emp.AnnualSalary > 0
+				annualSalary = emp.AnnualSalary
+				delete(salaryEmployeesByKey, key)
+			} else {
+				unmatched++
+			}
+		} else {
+			unmatched++
+		}
+
+		employeeSummary = append(employeeSummary, timePunchEmployeeTotals{
+			Name:       totals.Name,
+			Department: department,
+			Hours:      totals.Hours,
+			Wages:      totals.Wages,
+		})
+
+		if salaryEmployee {
+			salaryHours += totals.Hours
+			if dayCount > 0 && annualSalary > 0 {
+				salaryAmount += (annualSalary / 365.0) * float64(dayCount)
+			}
+		}
+
+		entry := departmentTotals[department]
+		entry.Department = department
+		entry.Hours += totals.Hours
+		entry.Wages += totals.Wages
+		if salaryEmployee && dayCount > 0 && annualSalary > 0 {
+			entry.Wages += (annualSalary / 365.0) * float64(dayCount)
+		}
+		departmentTotals[department] = entry
+	}
+
+	if dayCount > 0 {
+		for _, emp := range salaryEmployeesByKey {
+			department := emp.Department
+			prorated := (emp.AnnualSalary / 365.0) * float64(dayCount)
+			salaryAmount += prorated
+			entry := departmentTotals[department]
+			entry.Department = department
+			entry.Wages += prorated
+			departmentTotals[department] = entry
+			employeeSummary = append(employeeSummary, timePunchEmployeeTotals{
+				Name:       strings.TrimSpace(emp.LastName + ", " + emp.FirstName),
+				Department: department,
+				Hours:      0,
+				Wages:      prorated,
+			})
+		}
+	}
+
+	if unmatched > 0 {
+		if _, ok := departmentTotals["TERMINATED"]; !ok {
+			departmentTotals["TERMINATED"] = timePunchDepartmentTotals{
+				Department: "TERMINATED",
+			}
+		}
+	}
+
+	var departmentSummary []timePunchDepartmentTotals
+	for _, entry := range departmentTotals {
+		departmentSummary = append(departmentSummary, entry)
+	}
+	sort.Slice(departmentSummary, func(i, j int) bool {
+		return departmentSummary[i].Department < departmentSummary[j].Department
+	})
+	sort.Slice(employeeSummary, func(i, j int) bool {
+		return employeeSummary[i].Name < employeeSummary[j].Name
+	})
+
+	if reportTotals.TotalHours == 0 || reportTotals.TotalWages == 0 {
+		for _, totals := range employeeTotals {
+			reportTotals.TotalHours += totals.Hours
+			reportTotals.TotalWages += totals.Wages
+		}
+	}
+
+	var departmentHours float64
+	var departmentWages float64
+	for _, entry := range departmentTotals {
+		departmentHours += entry.Hours
+		departmentWages += entry.Wages
+	}
+
+	var payrollEventsTotal float64
+	for _, event := range payrollEvents {
+		payrollEventsTotal += event.Amount
+	}
+
+	wagesWithSalary := departmentWages
+	wagesWithPayroll := wagesWithSalary + payrollEventsTotal
+	departmentHoursAll := departmentHours
+
+	summary := timePunchSummary{
+		StartDate:          formatDateRange(startDate),
+		EndDate:            formatDateRange(endDate),
+		DayCount:           dayCount,
+		DepartmentTotals:   departmentSummary,
+		EmployeeTotals:     employeeSummary,
+		TotalHours:         reportTotals.TotalHours,
+		OvertimeHours:      reportTotals.OvertimeHours,
+		TotalWages:         reportTotals.TotalWages,
+		DepartmentHours:    departmentHours,
+		DepartmentWages:    departmentWages,
+		DepartmentHoursAll: departmentHoursAll,
+		WagesWithSalary:    wagesWithSalary,
+		WagesWithPayroll:   wagesWithPayroll,
+		PayrollEventsTotal: payrollEventsTotal,
+		TotalSales:         0,
+		Productivity:       0,
+		SalaryAmount:       salaryAmount,
+		SalaryHours:        salaryHours,
+		UnmatchedEmployees: unmatched,
+	}
+	return summary, nil
+}
+
+func formatDateRange(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Format("2006-01-02")
+}
+
 func readRowsFromSpreadsheet(reader io.Reader, filename string) ([][]string, error) {
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -615,85 +953,6 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
-	})
-
-	// Salaries Page
-	app.At("GET /admin/locations/{id}/salaries", func(w http.ResponseWriter, r *http.Request) {
-		idStr := r.PathValue("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			http.Error(w, "Invalid ID", http.StatusBadRequest)
-			return
-		}
-		loc, err := data.GetLocationByID(id)
-		if err != nil {
-			http.Error(w, "Location not found", http.StatusNotFound)
-			return
-		}
-		salaries, err := data.GetSalariesByLocation(id)
-		if err != nil {
-			salaries = []data.Salary{}
-		}
-		var totalAnnual, totalDaily float64
-		for _, s := range salaries {
-			totalAnnual += s.AnnualAmount
-			totalDaily += s.DailyAmount
-		}
-		templateData := struct {
-			Location    data.CfaLocation
-			Salaries    []data.Salary
-			TotalAnnual float64
-			TotalDaily  float64
-		}{
-			Location:    loc,
-			Salaries:    salaries,
-			TotalAnnual: totalAnnual,
-			TotalDaily:  totalDaily,
-		}
-		err = vii.ExecuteTemplate(w, r, "salaries.html", templateData)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-
-	// Create Salary
-	app.At("POST /admin/locations/{id}/salaries", func(w http.ResponseWriter, r *http.Request) {
-		idStr := r.PathValue("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			http.Error(w, "Invalid ID", http.StatusBadRequest)
-			return
-		}
-		name := r.FormValue("name")
-		amountStr := r.FormValue("annual_amount")
-		amount, err := strconv.ParseFloat(amountStr, 64)
-		if err != nil || name == "" {
-			http.Error(w, "Invalid input", http.StatusBadRequest)
-			return
-		}
-		err = data.CreateSalary(id, name, amount)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/admin/locations/"+idStr+"/salaries", http.StatusSeeOther)
-	})
-
-	// Delete Salary
-	app.At("POST /admin/locations/{id}/salaries/{salaryId}/delete", func(w http.ResponseWriter, r *http.Request) {
-		idStr := r.PathValue("id")
-		salaryIdStr := r.PathValue("salaryId")
-		salaryId, err := strconv.Atoi(salaryIdStr)
-		if err != nil {
-			http.Error(w, "Invalid Salary ID", http.StatusBadRequest)
-			return
-		}
-		err = data.DeleteSalary(salaryId)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/admin/locations/"+idStr+"/salaries", http.StatusSeeOther)
 	})
 
 	// Payroll Events Page
@@ -911,7 +1170,7 @@ func RegisterRoutes(app *vii.App) {
 		for key, emp := range activeByTimePunch {
 			if existing, ok := existingByTimePunch[key]; ok {
 				if existing.FirstName != emp.FirstName || existing.LastName != emp.LastName {
-					err := data.UpdateEmployee(existing.ID, emp.FirstName, emp.LastName, existing.Birthday, existing.Department)
+					err := data.UpdateEmployee(existing.ID, emp.FirstName, emp.LastName, existing.Birthday, existing.Department, existing.AnnualSalary)
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -988,7 +1247,7 @@ func RegisterRoutes(app *vii.App) {
 			if existing.Birthday == row.Birthday {
 				continue
 			}
-			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, row.Birthday, existing.Department); err != nil {
+			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, row.Birthday, existing.Department, existing.AnnualSalary); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -1053,13 +1312,111 @@ func RegisterRoutes(app *vii.App) {
 			if existing.Department == row.Department {
 				continue
 			}
-			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, existing.Birthday, row.Department); err != nil {
+			if err := data.UpdateEmployee(existing.ID, existing.FirstName, existing.LastName, existing.Birthday, row.Department, existing.AnnualSalary); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		}
 
 		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Time Punch Summary
+	app.At("GET /admin/locations/{id}/timepunch", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+		templateData := struct {
+			Location data.CfaLocation
+			Summary  *timePunchSummary
+			Error    string
+		}{
+			Location: loc,
+		}
+		if err := vii.ExecuteTemplate(w, r, "time_punch_summary.html", templateData); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	app.At("POST /admin/locations/{id}/timepunch", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+		loc, err := data.GetLocationByID(id)
+		if err != nil {
+			http.Error(w, "Location not found", http.StatusNotFound)
+			return
+		}
+		text := r.FormValue("time_punch_text")
+		employees, err := data.GetEmployeesByLocation(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		salaryDaily, err := data.GetDailySalaryCost(id)
+		if err != nil {
+			salaryDaily = 0
+		}
+		employeeTotals, reportTotals, startDate, endDate, err := parseTimePunchReport(text)
+		if err != nil {
+			templateData := struct {
+				Location data.CfaLocation
+				Summary  *timePunchSummary
+				Error    string
+			}{
+				Location: loc,
+				Error:    err.Error(),
+			}
+			if err := vii.ExecuteTemplate(w, r, "time_punch_summary.html", templateData); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		payrollEvents := []data.PayrollEvent{}
+		if !startDate.IsZero() && !endDate.IsZero() && !endDate.Before(startDate) {
+			payrollEvents, err = data.GetPayrollEventsByLocation(id, formatDateRange(startDate), formatDateRange(endDate))
+			if err != nil {
+				payrollEvents = []data.PayrollEvent{}
+			}
+		}
+
+		summary, err := summarizeTimePunchReportFromParsed(employeeTotals, reportTotals, startDate, endDate, employees, salaryDaily, payrollEvents)
+		templateData := struct {
+			Location data.CfaLocation
+			Summary  *timePunchSummary
+			Error    string
+		}{
+			Location: loc,
+		}
+		if err == nil && !startDate.IsZero() && !endDate.IsZero() && !endDate.Before(startDate) {
+			totalSales, err := data.GetTotalSalesByLocation(id, formatDateRange(startDate), formatDateRange(endDate))
+			if err == nil {
+				summary.TotalSales = totalSales
+				if summary.TotalHours > 0 {
+					summary.Productivity = totalSales / summary.TotalHours
+				}
+			}
+		}
+		if err != nil {
+			templateData.Error = err.Error()
+		} else {
+			templateData.Summary = &summary
+		}
+		if err := vii.ExecuteTemplate(w, r, "time_punch_summary.html", templateData); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 
 	// Edit Employee Form
@@ -1114,11 +1471,20 @@ func RegisterRoutes(app *vii.App) {
 		lastName := r.FormValue("last_name")
 		birthday := r.FormValue("birthday")
 		department := r.FormValue("department")
+		annualSalaryStr := strings.TrimSpace(r.FormValue("annual_salary"))
+		annualSalary := 0.0
+		if annualSalaryStr != "" {
+			annualSalary, err = strconv.ParseFloat(annualSalaryStr, 64)
+			if err != nil || annualSalary < 0 {
+				http.Error(w, "Annual salary must be a non-negative number", http.StatusBadRequest)
+				return
+			}
+		}
 		if firstName == "" || lastName == "" {
 			http.Error(w, "First name and last name are required", http.StatusBadRequest)
 			return
 		}
-		err = data.UpdateEmployee(empId, firstName, lastName, birthday, department)
+		err = data.UpdateEmployee(empId, firstName, lastName, birthday, department, annualSalary)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
