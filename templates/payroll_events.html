@@ -15,7 +15,11 @@
 <body>
     <h1>Payroll Events</h1>
     <h2>Location: {{ .Location.Name }}</h2>
-    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <span>Payroll Events</span>
+    </nav>
     <hr>
 
     <p style="color: #666;">Payroll events (bonuses, vacation pay, backpay, etc.) are added to the labor wages for their specific date in performance calculations.</p>

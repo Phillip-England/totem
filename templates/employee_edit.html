@@ -8,7 +8,12 @@
 <body>
     <h1>Edit Employee</h1>
     <h2>{{ .Employee.FirstName }} {{ .Employee.LastName }}</h2>
-    <a href="/admin/locations/{{ .Location.ID }}/employees">Back to Employees</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <a href="/admin/locations/{{ .Location.ID }}/employees">Employees</a> /
+        <span>Edit</span>
+    </nav>
     <hr>
 
     <form action="/admin/locations/{{ .Location.ID }}/employees/{{ .Employee.ID }}" method="POST" style="max-width: 400px;">

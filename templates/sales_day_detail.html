@@ -15,7 +15,12 @@
     <h1>Sales Breakdown</h1>
     <h2>Location: {{ .Location.Name }}</h2>
     <h3>Date: {{ .Date }}</h3>
-    <a href="/admin/locations/{{ .Location.ID }}/sales/history">Back to History</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <a href="/admin/locations/{{ .Location.ID }}/sales/history">Sales History</a> /
+        <span>Sales Breakdown</span>
+    </nav>
     <hr>
 
     <div class="grid">

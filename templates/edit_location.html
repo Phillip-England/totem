@@ -7,7 +7,11 @@
 </head>
 <body>
     <h1>Edit Location</h1>
-    <a href="/admin">Back to Dashboard</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <span>Edit Location</span>
+    </nav>
 
     <form action="/admin/locations/{{ .Location.ID }}/update" method="POST">
         <label for="name">Name:</label>

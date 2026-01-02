@@ -14,7 +14,12 @@
 <body>
     <h1>Enter Daily Sales</h1>
     <h2>Location: {{ .Location.Name }}</h2>
-    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <a href="/admin/locations/{{ .Location.ID }}/sales/history">Sales History</a> /
+        <span>Enter Daily Sales</span>
+    </nav>
     <hr>
 
     <form action="/admin/locations/{{ .Location.ID }}/sales" method="POST">

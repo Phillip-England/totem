@@ -14,7 +14,11 @@
 <body>
     <h1>Annual Salaries</h1>
     <h2>Location: {{ .Location.Name }}</h2>
-    <a href="/admin/locations/{{ .Location.ID }}">Back to Location</a>
+    <nav style="font-size: 0.9em; margin-bottom: 10px;">
+        <a href="/admin">Dashboard</a> /
+        <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
+        <span>Annual Salaries</span>
+    </nav>
     <hr>
 
     <p style="color: #666;">Salaries are divided by 365 and added to daily labor costs in all performance calculations.</p>
