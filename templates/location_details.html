@@ -4,35 +4,64 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .Location.Name }} - Details</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .page { max-width: 900px; margin: 0 auto; padding: 24px; }
+        .meta { margin: 14px 0 24px; }
+        .meta p { margin: 6px 0; }
+        .section { margin: 18px 0; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .btn { display: inline-block; padding: 10px 14px; border-radius: 6px; text-decoration: none; color: #fff; }
+        .btn-muted { color: #212529; }
+        .btn-blue { background: #007bff; }
+        .btn-gray { background: #6c757d; }
+        .btn-green { background: #28a745; }
+        .btn-teal { background: #17a2b8; }
+        .btn-purple { background: #6f42c1; }
+        .btn-mint { background: #20c997; }
+        .btn-primary { background: #0d6efd; }
+    </style>
 </head>
 <body>
-    <h1>Location Details</h1>
-    <nav style="font-size: 0.9em; margin-bottom: 10px;">
-        <a href="/admin">Dashboard</a> /
-        <span>{{ .Location.Name }}</span>
-    </nav>
-    <hr>
-    
-    <p><strong>ID:</strong> {{ .Location.ID }}</p>
-    <p><strong>Name:</strong> {{ .Location.Name }}</p>
-    <p><strong>Number:</strong> {{ .Location.Number }}</p>
+    <div class="page">
+        <h1>Location Details</h1>
+        <nav style="font-size: 0.9em; margin-bottom: 10px;">
+            <a href="/admin">Dashboard</a> /
+            <span>{{ .Location.Name }}</span>
+        </nav>
+        <hr>
+        
+        <div class="meta">
+            <p><strong>ID:</strong> {{ .Location.ID }}</p>
+            <p><strong>Name:</strong> {{ .Location.Name }}</p>
+            <p><strong>Number:</strong> {{ .Location.Number }}</p>
+        </div>
 
-    <br>
-    <a href="/admin/locations/{{ .Location.ID }}/sales/new" style="background: #007bff; color: white; padding: 10px; text-decoration: none; border-radius: 5px;">Enter Daily Sales</a>
-    <a href="/admin/locations/{{ .Location.ID }}/sales/history" style="background: #6c757d; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">View Sales History</a>
-    
-    <br><br>
-    
-    <a href="/admin/locations/{{ .Location.ID }}/labor/new" style="background: #28a745; color: white; padding: 10px; text-decoration: none; border-radius: 5px;">Enter Labor Hours</a>
-    <a href="/admin/locations/{{ .Location.ID }}/labor/history" style="background: #17a2b8; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">View Performance History</a>
+        <div class="section">
+            <div class="actions">
+                <a class="btn btn-blue" href="/admin/locations/{{ .Location.ID }}/sales/new">Enter Daily Sales</a>
+                <a class="btn btn-gray" href="/admin/locations/{{ .Location.ID }}/sales/history">View Sales History</a>
+            </div>
+        </div>
 
-    <br><br>
+        <div class="section">
+            <div class="actions">
+                <a class="btn btn-green" href="/admin/locations/{{ .Location.ID }}/labor/new">Enter Labor Hours</a>
+                <a class="btn btn-teal" href="/admin/locations/{{ .Location.ID }}/labor/history">View Performance History</a>
+            </div>
+        </div>
 
-    <a href="/admin/locations/{{ .Location.ID }}/payroll" style="background: #6f42c1; color: white; padding: 10px; text-decoration: none; border-radius: 5px;">Payroll Events</a>
-    <a href="/admin/locations/{{ .Location.ID }}/employees" style="background: #20c997; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">Employees</a>
-    <a href="/admin/locations/{{ .Location.ID }}/timepunch" style="background: #0d6efd; color: white; padding: 10px; text-decoration: none; border-radius: 5px; margin-left: 10px;">Time Punch Summary</a>
+        <div class="section">
+            <div class="actions">
+                <a class="btn btn-purple" href="/admin/locations/{{ .Location.ID }}/payroll">Payroll Events</a>
+                <a class="btn btn-mint" href="/admin/locations/{{ .Location.ID }}/employees">Employees</a>
+                <a class="btn btn-primary" href="/admin/locations/{{ .Location.ID }}/timepunch">Time Punch Summary</a>
+            </div>
+        </div>
 
-    <br><br>
-    <a href="/admin/locations/{{ .Location.ID }}/edit">Edit this Location</a>
+        <div class="section">
+            <a href="/admin/locations/{{ .Location.ID }}/edit">Edit this Location</a>
+        </div>
+    </div>
 </body>
 </html>
