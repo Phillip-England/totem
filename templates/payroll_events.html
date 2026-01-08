@@ -48,7 +48,7 @@
                 <select name="employee_id" required style="width: 100%; padding: 8px; box-sizing: border-box;">
                     <option value="">Select employee</option>
                     {{ range .Employees }}
-                    <option value="{{ .ID }}">{{ .FirstName }} {{ .LastName }}</option>
+                    <option value="{{ .ID }}">{{ .FirstName }} {{ .LastName }}{{ if .Terminated }} (Terminated){{ end }}</option>
                     {{ end }}
                 </select>
             </label>

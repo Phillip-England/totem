@@ -1141,7 +1141,7 @@ func RegisterRoutes(app *vii.App) {
 		if err != nil {
 			events = []data.PayrollEvent{}
 		}
-		employees, err := data.GetEmployeesByLocation(id)
+		employees, err := data.GetAllEmployeesByLocation(id)
 		if err != nil {
 			employees = []data.Employee{}
 		}
@@ -1241,16 +1241,34 @@ func RegisterRoutes(app *vii.App) {
 			http.Error(w, "Location not found", http.StatusNotFound)
 			return
 		}
-		employees, err := data.GetEmployeesByLocation(id)
+
+		status := r.URL.Query().Get("status")
+		if status == "" {
+			status = "active"
+		}
+
+		var employees []data.Employee
+		switch status {
+		case "terminated":
+			employees, err = data.GetTerminatedEmployeesByLocation(id)
+		case "all":
+			employees, err = data.GetAllEmployeesByLocation(id)
+		default:
+			status = "active"
+			employees, err = data.GetActiveEmployeesByLocation(id)
+		}
 		if err != nil {
 			employees = []data.Employee{}
 		}
+
 		templateData := struct {
 			Location  data.CfaLocation
 			Employees []data.Employee
+			Status    string
 		}{
 			Location:  loc,
 			Employees: employees,
+			Status:    status,
 		}
 		err = vii.ExecuteTemplate(w, r, "employees.html", templateData)
 		if err != nil {
@@ -1302,7 +1320,7 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 
-		existingEmployees, err := data.GetEmployeesByLocation(id)
+		existingEmployees, err := data.GetAllEmployeesByLocation(id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1325,8 +1343,17 @@ func RegisterRoutes(app *vii.App) {
 			activeByTimePunch[emp.TimePunchName] = emp
 		}
 
+		terminationDate := time.Now().Format("2006-01-02")
+
 		for key, emp := range activeByTimePunch {
 			if existing, ok := existingByTimePunch[key]; ok {
+				// If employee was terminated but now appears in active bio, reinstate them
+				if existing.Terminated {
+					if err := data.ReinstateEmployee(existing.ID); err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+				}
 				if existing.FirstName != emp.FirstName || existing.LastName != emp.LastName {
 					err := data.UpdateEmployee(existing.ID, emp.FirstName, emp.LastName, existing.Birthday, existing.Department, existing.AnnualSalary)
 					if err != nil {
@@ -1351,9 +1378,12 @@ func RegisterRoutes(app *vii.App) {
 			if _, ok := activeByTimePunch[key]; ok {
 				continue
 			}
-			if err := data.DeleteEmployee(existing.ID); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+			// Only terminate if not already terminated
+			if !existing.Terminated {
+				if err := data.TerminateEmployee(existing.ID, terminationDate); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 
@@ -1661,6 +1691,41 @@ func RegisterRoutes(app *vii.App) {
 			return
 		}
 		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Terminate Employee
+	app.At("POST /admin/locations/{id}/employees/{empId}/terminate", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		empIdStr := r.PathValue("empId")
+		empId, err := strconv.Atoi(empIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Employee ID", http.StatusBadRequest)
+			return
+		}
+		terminationDate := time.Now().Format("2006-01-02")
+		err = data.TerminateEmployee(empId, terminationDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees", http.StatusSeeOther)
+	})
+
+	// Reinstate Employee
+	app.At("POST /admin/locations/{id}/employees/{empId}/reinstate", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		empIdStr := r.PathValue("empId")
+		empId, err := strconv.Atoi(empIdStr)
+		if err != nil {
+			http.Error(w, "Invalid Employee ID", http.StatusBadRequest)
+			return
+		}
+		err = data.ReinstateEmployee(empId)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/locations/"+idStr+"/employees?status=terminated", http.StatusSeeOther)
 	})
 
 	// Edit Location Form

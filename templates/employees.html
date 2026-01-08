@@ -23,6 +23,13 @@
         <a href="/admin/locations/{{ .Location.ID }}">{{ .Location.Name }}</a> /
         <span>Employees</span>
     </nav>
+
+    <div style="margin: 15px 0; padding: 10px 0; border-bottom: 1px solid #ddd;">
+        <span style="margin-right: 10px;">View:</span>
+        <a href="/admin/locations/{{ .Location.ID }}/employees?status=active" style="margin-right: 10px; padding: 5px 12px; text-decoration: none; border-radius: 4px; {{ if eq .Status "active" }}background: #0d6efd; color: white;{{ else }}background: #e9ecef; color: #333;{{ end }}">Active</a>
+        <a href="/admin/locations/{{ .Location.ID }}/employees?status=terminated" style="margin-right: 10px; padding: 5px 12px; text-decoration: none; border-radius: 4px; {{ if eq .Status "terminated" }}background: #0d6efd; color: white;{{ else }}background: #e9ecef; color: #333;{{ end }}">Terminated</a>
+        <a href="/admin/locations/{{ .Location.ID }}/employees?status=all" style="padding: 5px 12px; text-decoration: none; border-radius: 4px; {{ if eq .Status "all" }}background: #0d6efd; color: white;{{ else }}background: #e9ecef; color: #333;{{ end }}">All</a>
+    </div>
     <hr>
 
     <h3>Add New Employee</h3>
@@ -46,7 +53,7 @@
             <input type="file" name="bio_file" accept=".xlsx" required>
         </div>
         <p style="margin: 0 0 10px 0; color: #555;">
-            This replaces the location roster: active employees in the file are added, and anyone missing or terminated is removed.
+            Syncs the location roster: active employees in the file are added or reinstated, and anyone missing is marked as terminated.
         </p>
         <button type="submit" style="background: #0d6efd; color: white; border: none; padding: 10px 20px; cursor: pointer; font-size: 1em;">Import Employees</button>
     </form>
@@ -74,7 +81,7 @@
     </form>
 
     <hr>
-    <h3>Employee List ({{ len .Employees }} employees)</h3>
+    <h3>Employee List ({{ len .Employees }} {{ if eq .Status "active" }}active{{ else if eq .Status "terminated" }}terminated{{ else }}total{{ end }} employees)</h3>
 
     {{ if .Employees }}
     <table>
@@ -84,28 +91,36 @@
                 <th>Time Punch Name</th>
                 <th>Department</th>
                 <th>Birthday</th>
+                {{ if eq $.Status "all" }}<th>Status</th>{{ end }}
                 <th style="text-align: center;">Actions</th>
             </tr>
         </thead>
         <tbody>
             {{ range .Employees }}
-            <tr>
+            <tr{{ if .Terminated }} style="background-color: #f8f9fa; color: #6c757d;"{{ end }}>
                 <td>{{ .FirstName }} {{ .LastName }}</td>
                 <td><code>{{ .TimePunchName }}</code></td>
                 <td>{{ .Department }}</td>
                 <td>{{ if .Birthday }}{{ .Birthday }}{{ else }}<em>Not set</em>{{ end }}</td>
+                {{ if eq $.Status "all" }}<td>{{ if .Terminated }}<span style="color: #dc3545;">Terminated{{ if .TerminationDate }} ({{ .TerminationDate }}){{ end }}</span>{{ else }}<span style="color: #28a745;">Active</span>{{ end }}</td>{{ end }}
                 <td style="text-align: center;">
                     <a href="/admin/locations/{{ $.Location.ID }}/employees/{{ .ID }}/edit" style="margin-right: 10px;">Edit</a>
-                    <form action="/admin/locations/{{ $.Location.ID }}/employees/{{ .ID }}/delete" method="POST" style="display: inline;" onsubmit="return confirm('Delete this employee?');">
-                        <button type="submit" style="background: #dc3545; color: white; border: none; padding: 5px 15px; cursor: pointer;">Delete</button>
+                    {{ if .Terminated }}
+                    <form action="/admin/locations/{{ $.Location.ID }}/employees/{{ .ID }}/reinstate" method="POST" style="display: inline;" onsubmit="return confirm('Reinstate this employee?');">
+                        <button type="submit" style="background: #28a745; color: white; border: none; padding: 5px 15px; cursor: pointer;">Reinstate</button>
                     </form>
+                    {{ else }}
+                    <form action="/admin/locations/{{ $.Location.ID }}/employees/{{ .ID }}/terminate" method="POST" style="display: inline;" onsubmit="return confirm('Terminate this employee? They will be marked as inactive but their data will be preserved.');">
+                        <button type="submit" style="background: #dc3545; color: white; border: none; padding: 5px 15px; cursor: pointer;">Terminate</button>
+                    </form>
+                    {{ end }}
                 </td>
             </tr>
             {{ end }}
         </tbody>
     </table>
     {{ else }}
-    <p><em>No employees added yet.</em></p>
+    <p><em>No {{ if eq .Status "active" }}active{{ else if eq .Status "terminated" }}terminated{{ else }}{{ end }} employees found.</em></p>
     {{ end }}
     </div>
 </body>
